@@ -127,7 +127,7 @@ grails.enable.native2ascii = true
 grails.exceptionresolver.params.exclude = ['password', 'j_password']
 
 thread {
-    useJitter = true
+    useJitter = false
 }
 
 cloud {

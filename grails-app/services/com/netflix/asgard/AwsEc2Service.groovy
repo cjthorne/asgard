@@ -58,10 +58,12 @@ import com.amazonaws.services.ec2.model.GetConsoleOutputRequest
 import com.amazonaws.services.ec2.model.GetConsoleOutputResult
 import com.amazonaws.services.ec2.model.Image
 import com.amazonaws.services.ec2.model.Instance
+import com.amazonaws.services.ec2.model.InstanceState
 import com.amazonaws.services.ec2.model.InstanceStateChange
 import com.amazonaws.services.ec2.model.IpPermission
 import com.amazonaws.services.ec2.model.KeyPairInfo
 import com.amazonaws.services.ec2.model.ModifyImageAttributeRequest
+import com.amazonaws.services.ec2.model.Placement
 import com.amazonaws.services.ec2.model.RebootInstancesRequest
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest
 import com.amazonaws.services.ec2.model.RequestSpotInstancesResult
@@ -92,12 +94,20 @@ import com.netflix.asgard.model.SecurityGroupOption
 import com.netflix.asgard.model.Subnets
 import com.netflix.asgard.model.ZoneAvailability
 import com.netflix.frigga.ami.AppVersion
+
 import groovyx.gpars.GParsExecutorsPool
+
 import java.util.regex.Matcher
 import java.util.regex.Pattern
+
 import org.apache.commons.codec.binary.Base64
+import org.codehaus.groovy.grails.web.json.JSONElement
+import org.codehaus.groovy.grails.web.json.JSONArray
 import org.codehaus.groovy.runtime.StackTraceUtils
 import org.springframework.beans.factory.InitializingBean
+
+import java.text.DateFormat
+import java.text.SimpleDateFormat
 
 class AwsEc2Service implements CacheInitializer, InitializingBean {
 
@@ -110,6 +120,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     Caches caches
     def configService
     def restClientService
+	def restClientRightScaleService
     def taskService
     ThreadScheduler threadScheduler
     List<String> accounts = [] // main account is accounts[0]
@@ -146,9 +157,21 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Availability Zones
 
     private List<AvailabilityZone> retrieveAvailabilityZones(Region region) {
-        DescribeAvailabilityZonesResult result =
-                awsClient.by(region).describeAvailabilityZones(new DescribeAvailabilityZonesRequest())
-        result.getAvailabilityZones().sort { it.zoneName }
+		def List<AvailabilityZone> result
+		if (region.code == 'dal-1') {
+			result = [
+				new AvailabilityZone(zoneName : 'DAL01', state : 'available', regionName : 'dal-1'),
+				new AvailabilityZone(zoneName : 'DAL05', state : 'available', regionName : 'dal-1')
+			]
+		}
+		else {
+			result = awsClient.by(region).describeAvailabilityZones(new DescribeAvailabilityZonesRequest()).getAvailabilityZones()
+		}
+		//log.warn "availability zones = " + result
+		//availability zones = [{ZoneName: ap-southeast-2a, State: available, RegionName: ap-southeast-2, Messages: [], },
+		// {ZoneName: ap-southeast-2b, State: available, RegionName: ap-southeast-2, Messages: [], }]
+
+        result.sort { it.zoneName }
     }
 
     Collection<AvailabilityZone> getAvailabilityZones(UserContext userContext) {
@@ -162,7 +185,56 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 
     // Images
 
+	private String getRightScaleImageHref(JSONArray links) {
+		def selflink = links.find { it.rel == 'self' }
+		return selflink.href
+	}
+
+	private List<Image> retrieveAllRightScaleImages(Region region) {
+		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.warn resp1
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
+		List<Instance> images = []
+		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+		json.each {
+			log.warn "json image = " + it
+			String href = getRightScaleImageHref(it.links)
+			Tag tag = new Tag(
+				key : 'rightscale_imagehref',
+				value : href
+			)
+			Image image = new Image(
+				imageId: it.resource_uid,
+				imageLocation: it.resource_uid + '/' + it.name,
+				state: 'available',
+				ownerId: '665469383253',
+				//public: false,
+				//productCodes: [],
+				architecture: it.cpu_architecture,
+				imageType: it.image_type,
+				kernelId: 'aki-fakeid',
+				name: it.name,
+				//description: ,
+				rootDeviceType: 'ebs',
+				rootDeviceName: '/dev/sda1',
+				//BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
+				virtualizationType: 'paravirtual',
+				//Tags: [],
+				hypervisor: 'fakehv').withTags([tag])
+			log.warn "image = " + image
+			
+			images.add(image)
+		}
+		log.warn 'images = ' + images
+		return images
+	}
     private List<Image> retrieveImages(Region region) {
+		if (region.code == 'dal-1') {
+			return retrieveAllRightScaleImages(region)
+		}
+		
         List<String> owners = configService.publicResourceAccounts + configService.awsAccounts
         DescribeImagesRequest request = new DescribeImagesRequest().withOwners(owners)
         AmazonEC2 awsClientForRegion = awsClient.by(region)
@@ -180,7 +252,27 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
             // Merge the images with tags issue and add any tagless images to the list
             images = images.collect { imageIdToImageWithTags[it.imageId] ?: it }
         }
-
+		//log.warn "images = " + images
+//		images = [
+//			{
+//				ImageId: ami-00d29669,
+//				ImageLocation: 665469383253/acmeair-auth-service-wlp-0.0.0.3,
+//				State: available,
+//				OwnerId: 665469383253,
+//				Public: false,
+//				ProductCodes: [],
+//				Architecture: x86_64,
+//				ImageType: machine,
+//				KernelId: aki-88aa75e1,
+//				Name: acmeair-auth-service-wlp-0.0.0.3,
+//				Description: ,
+//				RootDeviceType: ebs,
+//				RootDeviceName: /dev/sda1,
+//				BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
+//				VirtualizationType: paravirtual,
+//				Tags: [],
+//				Hypervisor: xen
+//			}, {ImageId: ...
         images
     }
 
@@ -189,6 +281,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private Collection<Subnet> retrieveSubnets(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeSubnets().subnets
     }
 
@@ -203,6 +296,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private Collection<Vpc> retrieveVpcs(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeVpcs().vpcs
     }
 
@@ -251,15 +345,22 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
                 image = caches.allImages.by(userContext.region).get(imageId)
                 if (image) { return image }
             }
-            def request = new DescribeImagesRequest().withImageIds(imageId)
-            try {
-                List<Image> images = awsClient.by(userContext.region).describeImages(request).getImages()
-                image = Check.loneOrNone(images, Image)
-            }
-            catch (AmazonServiceException ignored) {
-                // If Amazon doesn't know this image id then return null and put null in the allImages CachedMap
-            }
-            caches.allImages.by(userContext.region).put(imageId, image)
+			List<Image> images = []
+			if (userContext.region.code == 'dal-1') {
+				images = retrieveAllRightScaleImages(userContext.region)
+				images = images.findAll { it.imageId == imageId }
+			}
+			else {
+				def request = new DescribeImagesRequest().withImageIds(imageId)
+				try {
+					images = awsClient.by(userContext.region).describeImages(request).getImages()
+				}
+				catch (AmazonServiceException ignored) {
+                	// If Amazon doesn't know this image id then return null and put null in the allImages CachedMap
+				}
+			}
+			image = Check.loneOrNone(images, Image)
+			caches.allImages.by(userContext.region).put(imageId, image)
         }
         image
     }
@@ -377,6 +478,11 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<KeyPairInfo> retrieveKeys(Region region) {
+		if (region.code == 'dal-1') {
+			return [
+				new KeyPairInfo(keyName: 'fakekey', keyFingerprint : 'XXXXXX')
+			]
+		}
         awsClient.by(region).describeKeyPairs(new DescribeKeyPairsRequest()).keyPairs
     }
 
@@ -405,6 +511,38 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<SecurityGroup> retrieveSecurityGroups(Region region) {
+		if (region.code == 'dal-1') {
+			return [new SecurityGroup(
+				ownerId: '12345',
+				groupName: 'default',
+				groupId: 'sg-fake',
+				description: 'fake security group',
+				//IpPermissions: [{IpProtocol: -1, UserIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }], IpRanges: [], }],
+				//IpPermissionsEgress: [{IpProtocol: -1, UserIdGroupPairs: [], IpRanges: [0.0.0.0/0], }],
+				vpcId: 'vpc-fake'
+				// Tags: []
+				).withIpPermissions([
+					new IpPermission(
+						ipProtocol: 'tcp', 
+						//userIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }],
+						//IpRanges: []
+					).withFromPort(0).withToPort(100)
+					]
+				)
+			]
+		}
+		//log.warn awsClient.by(region).describeSecurityGroups().securityGroups
+		//[{
+			//OwnerId: 665469383253,
+			//GroupName: default,
+			//GroupId: sg-f49f7b9b,
+			//Description: default VPC security group,
+			//IpPermissions:
+				//[{IpProtocol: -1, UserIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }], IpRanges: [], }],
+			//IpPermissionsEgress:
+				//[{IpProtocol: -1, UserIdGroupPairs: [], IpRanges: [0.0.0.0/0], }],
+			//VpcId: vpc-ec17a884
+			//Tags: [], }]
         awsClient.by(region).describeSecurityGroups().securityGroups
     }
 
@@ -646,6 +784,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Spot Instance Requests
 
     List<SpotInstanceRequest> retrieveSpotInstanceRequests(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeSpotInstanceRequests().spotInstanceRequests
     }
 
@@ -670,6 +809,34 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Instances
 
     private List<Instance> retrieveInstances(Region region) {
+		if (region.code == 'dal-1') {
+			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+			log.warn resp1
+			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json')
+			List<Instance> instances = []
+			def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+			json.each {
+				log.warn "instance = " + it
+				def instance = new Instance(
+					instanceId: it.name,
+					imageId: 'ami-fake',
+					instanceType: 'sl.fakesize',
+					launchTime: dateParser.parse(it.created_at),
+					).withState(
+						new InstanceState(code: 80, name: it.state)
+					).withPlacement(
+						new Placement(availabilityZone: 'DAL01', groupName: '', tenancy: 'default')
+					).withTags(
+						[ new Tag(key: 'Name', value: 'fake-name-tag-value') ]
+					)
+				instances.add(instance)
+			}
+		
+			return instances
+		}
+		
         List<Instance> instances = []
         def result = awsClient.by(region).describeInstances(new DescribeInstancesRequest())
         def reservations = result.getReservations()
@@ -888,6 +1055,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Reservations
 
     private List<ReservedInstances> retrieveReservations(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeReservedInstances().reservedInstances
     }
 
@@ -939,6 +1107,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<Volume> retrieveVolumes(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeVolumes(new DescribeVolumesRequest()).volumes
     }
 
@@ -1011,6 +1180,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<Snapshot> retrieveSnapshots(Region region) {
+		if (region.code == 'dal-1') return []
         List<String> owners = configService.publicResourceAccounts + configService.awsAccounts
         DescribeSnapshotsRequest request = new DescribeSnapshotsRequest().withOwnerIds(owners)
         awsClient.by(region).describeSnapshots(request).snapshots

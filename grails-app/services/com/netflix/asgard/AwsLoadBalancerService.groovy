@@ -86,6 +86,7 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
     // Load Balancers
 
     private List<LoadBalancerDescription> retrieveLoadBalancers(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeLoadBalancers(new DescribeLoadBalancersRequest()).getLoadBalancerDescriptions()
     }
 

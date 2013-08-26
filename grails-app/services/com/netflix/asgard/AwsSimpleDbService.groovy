@@ -53,6 +53,8 @@ class AwsSimpleDbService implements InitializingBean {
     // Domains
 
     List<String> listDomains(Region region) {
+		if (region.code == 'dal-1') return []
+		
         List<String> domains = []
 
         ListDomainsResult result = listDomainsWithToken(region, null)

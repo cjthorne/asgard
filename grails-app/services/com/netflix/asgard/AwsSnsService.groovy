@@ -83,6 +83,7 @@ class AwsSnsService implements CacheInitializer, InitializingBean {
     // Topics
 
     private List<TopicData> retrieveTopics(Region region) {
+		if (region.code == 'dal-1') return []
         List<Topic> topics = topicRetriever.retrieve(region, new ListTopicsRequest())
         topics.collect { new TopicData(it.topicArn) }
     }

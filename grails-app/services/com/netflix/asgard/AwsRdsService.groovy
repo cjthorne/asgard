@@ -86,6 +86,7 @@ class AwsRdsService implements CacheInitializer, InitializingBean {
     // Instances
 
     private List<DBInstance> retrieveDBInstances(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeDBInstances(new DescribeDBInstancesRequest()).getDBInstances()
     }
 
@@ -164,6 +165,7 @@ class AwsRdsService implements CacheInitializer, InitializingBean {
     }
 
     private List<DBSecurityGroup> retrieveDBSecurityGroups(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeDBSecurityGroups(new DescribeDBSecurityGroupsRequest()).getDBSecurityGroups()
     }
 
@@ -273,6 +275,7 @@ class AwsRdsService implements CacheInitializer, InitializingBean {
     }
 
     private List<DBSnapshot> retrieveDBSnapshots(Region region) {
+		if (region.code == 'dal-1') return []
         awsClient.by(region).describeDBSnapshots(new DescribeDBSnapshotsRequest()).getDBSnapshots()
     }
 

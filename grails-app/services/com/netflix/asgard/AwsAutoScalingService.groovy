@@ -48,14 +48,17 @@ import com.amazonaws.services.autoscaling.model.ResumeProcessesRequest
 import com.amazonaws.services.autoscaling.model.ScalingPolicy
 import com.amazonaws.services.autoscaling.model.ScheduledUpdateGroupAction
 import com.amazonaws.services.autoscaling.model.SuspendProcessesRequest
+import com.amazonaws.services.autoscaling.model.TagDescription
 import com.amazonaws.services.autoscaling.model.TerminateInstanceInAutoScalingGroupRequest
 import com.amazonaws.services.autoscaling.model.UpdateAutoScalingGroupRequest
 import com.amazonaws.services.cloudwatch.model.MetricAlarm
 import com.amazonaws.services.ec2.model.Image
+import com.amazonaws.services.ec2.model.Placement
 import com.amazonaws.services.ec2.model.SecurityGroup
 import com.amazonaws.services.elasticloadbalancing.model.LoadBalancerDescription
 import com.google.common.collect.ImmutableSet
 import com.netflix.asgard.cache.CacheInitializer
+import com.netflix.asgard.flow.LogMessage;
 import com.netflix.asgard.model.AlarmData
 import com.netflix.asgard.model.ApplicationInstance
 import com.netflix.asgard.model.AutoScalingGroupData
@@ -71,6 +74,7 @@ import com.netflix.asgard.push.Cluster
 import com.netflix.asgard.retriever.AwsResultsRetriever
 import com.netflix.frigga.ami.AppVersion
 import groovyx.gpars.GParsExecutorsPool
+import org.codehaus.groovy.grails.web.json.JSONArray
 import org.joda.time.DateTime
 import org.joda.time.Duration
 import org.springframework.beans.factory.InitializingBean
@@ -98,6 +102,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     def mergedInstanceService
     def pushService
     def taskService
+	def restClientRightScaleService
     ThreadScheduler threadScheduler
 
     /** The location of the sequence number in SimpleDB */
@@ -261,8 +266,65 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     // Auto Scaling Groups
+			
+	private String getRightScaleServerArrayId(JSONArray links) {
+		def selflink = links.find { it.rel == 'self' }
+		String href = selflink.href
+		return href.substring(href.lastIndexOf('/') + 1)
+	}
+			
+	private List<AutoScalingGroup> retrieveAllRightScaleArrays() {
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays.json')
+		List<AutoScalingGroup> groups = []
+		json.each {
+			log.warn "array = " + it
+			String arrayId = getRightScaleServerArrayId(it.links)
+			TagDescription tag = new TagDescription(
+				key : 'rightscale_serverarrayid',
+				value : arrayId
+			)
+			def AutoScalingGroup group = new AutoScalingGroup(
+				autoScalingGroupName : it.name,
+				minSize : it.elasticity_params.bounds.min_count.toInteger(),
+				maxSize : it.elasticity_params.bounds.max_count.toInteger(),
+				launchConfigurationName : 'fakeconfigname',
+				tags : [tag]
+			)
+			// TODO:  Figure out if I need to bring in the actual instance data
+			List<Instance> instances = []
+			for (int ii = 0 ; ii < it.instances_count; ii++) instances.add(
+				new Instance(
+					instanceId : it.name + '_' + ii, // TODO - get real instance data
+					availabilityZone: 'DAL01',
+					healthStatus: 'sick',
+					launchConfigurationName : 'fakeconfigname'
+					//lifeCycleState
+					)
+			)
+			group.setInstances(instances)
+			groups.add(group)
+		}
+		log.warn 'groups = ' + groups
+		return groups
+	}
+
+	private List<AutoScalingGroup> retrieveAllRightScaleArraysByNames(Collection<String> names) {
+		// TODO:  look for a more efficient query to rightscale
+		List<AutoScalingGroup> allGroups = retrieveAllRightScaleArrays();
+		List<AutoScalingGroup> matched = []
+		names.each { name->
+			def List<AutoScalingGroup> results = allGroups.findAll({ it -> it.getAutoScalingGroupName()  == name})
+			results.each { matched.add(it) }
+		}
+		matched
+	}
 
     private List<AutoScalingGroup> retrieveAutoScalingGroups(Region region) {
+		if (region.code == 'dal-1') {
+			return retrieveAllRightScaleArrays();
+		}
         List<AutoScalingGroup> groups = []
         DescribeAutoScalingGroupsResult result = retrieveAutoScalingGroups(region, null)
         while (true) {
@@ -272,6 +334,29 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             }
             result = retrieveAutoScalingGroups(region, result.getNextToken())
         }
+		log.warn 'groups for ' + region.code + ' = ' + groups
+		//[{
+		//AutoScalingGroupName: acmeair_auth_service_tc7,
+		//AutoScalingGroupARN: arn:aws:autoscaling:us-east-1:665469383253:autoScalingGroup:5c2670b0-ef31-4d7d-9a24-ff9ec4ab0dc5:autoScalingGroupName/acmeair_auth_service_tc7,
+		//LaunchConfigurationName: acmeair_auth_service_tc7-20130805211228
+		//MinSize: 0
+		//MaxSize: 10
+		//DesiredCapacity: 0
+		//DefaultCooldown: 10
+		//AvailabilityZones: [us-east-1a],
+		//LoadBalancerNames: [],
+		//HealthCheckType: EC2,
+		//HealthCheckGracePeriod: 600,
+		//Instances: [],
+		//CreatedTime: Mon Aug 05 17:12:29 EDT 2013,
+		//SuspendedProcesses: [],
+		//VPCZoneIdentifier: ,
+		//EnabledMetrics: [],
+		//Tags: [],
+		//TerminationPolicies: [Default],
+		//},
+		//{AutoScalingGroupName: acmeair_auth_service_wlp-v002,
+		//AutoScalingGroupARN: ..
         groups
     }
 
@@ -340,9 +425,16 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             if (from == From.CACHE) {
                 return names.collect { caches.allAutoScalingGroups.by(userContext.region).get(it) }.findAll { it != null }
             }
-            DescribeAutoScalingGroupsResult result = awsClient.by(userContext.region).describeAutoScalingGroups(
+			List<AutoScalingGroup> groups
+			if (userContext.region.code == 'dal-1') {
+				groups = retrieveAllRightScaleArraysByNames(names)
+				log.warn groups
+			}
+			else {
+				DescribeAutoScalingGroupsResult result = awsClient.by(userContext.region).describeAutoScalingGroups(
                     new DescribeAutoScalingGroupsRequest().withAutoScalingGroupNames(names))
-            List<AutoScalingGroup> groups = result.getAutoScalingGroups()
+				groups = result.getAutoScalingGroups()
+			}
             if (from == From.AWS) {
                 // Update the ASG cache for all the requested ASG names including the ASGs that no longer exist.
                 for (String name in names) {
@@ -394,7 +486,9 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     static final Integer UNLIMITED = Integer.MAX_VALUE
 
     List<Activity> getAutoScalingGroupActivities(UserContext userContext, String name, Integer maxTotalActivities) {
-
+		if (userContext.region.code == 'dal-1') {
+			return []
+		}
         List<Activity> activities = []
         Integer remainingActivitiesToFetch = maxTotalActivities
         String nextToken = null
@@ -462,6 +556,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     private List<ScalingPolicy> retrieveScalingPolicies(Region region) {
+		if (region.code == 'dal-1') return []
         scalingPolicyRetriever.retrieve(region, new DescribePoliciesRequest())
     }
 
@@ -482,6 +577,9 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describePolicies(DescribePoliciesRequest)
      */
     List<ScalingPolicy> getScalingPoliciesForGroup(UserContext userContext, String autoScalingGroupName) {
+		if (userContext.region.code == 'dal-1') {
+			return []
+		}
         if (!autoScalingGroupName) { return [] }
         DescribePoliciesRequest request = new DescribePoliciesRequest(autoScalingGroupName: autoScalingGroupName)
         awsClient.by(userContext.region).describePolicies(request).scalingPolicies
@@ -623,12 +721,16 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describeScheduledActions(DescribeScheduledActionsRequest)
      */
     List<ScheduledUpdateGroupAction> getScheduledActionsForGroup(UserContext userContext, String autoScalingGroupName) {
+		if (userContext.region.code == 'dal-1') {
+			return []
+		}
         if (!autoScalingGroupName) { return [] }
         def request = new DescribeScheduledActionsRequest(autoScalingGroupName: autoScalingGroupName)
         awsClient.by(userContext.region).describeScheduledActions(request)?.scheduledUpdateGroupActions
     }
 
     private List<ScheduledUpdateGroupAction> retrieveScheduledActions(Region region) {
+		if (region.code == 'dal-1') return []
         scheduledActionRetriever.retrieve(region, new DescribeScheduledActionsRequest())
     }
 
@@ -742,6 +844,50 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         getAutoScalingGroup(userContext, name)
     }
 
+	AutoScalingGroup createAutoScalingGroupRightScale(UserContext userContext, AutoScalingGroup groupTemplate,
+		LaunchConfiguration launchConfigTemplate, Collection<AutoScalingProcessType> suspendedProcesses,
+		Task existingTask = null) {
+		String name = groupTemplate.autoScalingGroupName
+	
+		taskService.runTask(userContext, "Create Autoscaling Group '${name}'", { Task task ->
+			Image image = caches.allImages.by(Region.DAL05).get(launchConfigTemplate.imageId)
+			String imageHref = image.tags.find { it.key = 'rightscale_imagehref'}.value
+			String deploymentId = configService.getRightScaleDeploymentId()
+			String templateId = configService.getRightScaleServerTemplateId()
+			String arrayName = groupTemplate.autoScalingGroupName
+			String arrayDesc = groupTemplate.autoScalingGroupName + ' auto generated description'
+			String cloudId = configService.getRightScaleCloudId()
+			
+			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+			log.warn resp1
+			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', [
+				'server_array[name]' : arrayName,
+				'server_array[description]' : arrayDesc,
+				'server_array[deployment_href]' : '/api/deployments/' + deploymentId,
+				'server_array[array_type]' : 'alert',
+				'server_array[state]' : 'disabled',
+				'server_array[instance][server_template_href]' : '/api/server_templates/' + templateId,
+				'server_array[instance][cloud_href]' : '/api/clouds/' + cloudId,
+				'server_array[instance][image_href]' : imageHref,
+				'server_array[instance][multi_cloud_image_href]' : configService.getRightScaleMultiCloudImageRestHref(),
+				'server_array[elasticity_params][alert_specific_params][decision_threshold]' : '51',
+				'server_array[elasticity_params][bounds][min_count]' : groupTemplate.minSize.toString(),
+				'server_array[elasticity_params][bounds][max_count]' : groupTemplate.maxSize.toString(),
+				'server_array[elasticity_params][pacing][resize_calm_time]' : '5',
+				'server_array[elasticity_params][pacing][resize_down_by]' : '1',
+				'server_array[elasticity_params][pacing][resize_up_by]' : '1',
+				'server_array[state]' : 'enabled'
+			])
+			log.warn resp2
+			suspendedProcesses.each {
+				suspendProcess(userContext, it, name, task)
+			}
+		}, Link.to(EntityType.autoScaling, name), existingTask)
+		getAutoScalingGroup(userContext, name)
+	}
+	
     /**
      * Resize an ASG.
      *
@@ -851,13 +997,31 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         }
 
         taskService.runTask(userContext, "Update Autoscaling Group '${autoScalingGroupData.autoScalingGroupName}'", { Task task ->
-            processTypesToSuspend.each {
-                suspendProcess(userContext, it, autoScalingGroupData.autoScalingGroupName, task)
-            }
-            processTypesToResume.each {
-                resumeProcess(userContext, it, autoScalingGroupData.autoScalingGroupName, task)
-            }
-            awsClient.by(userContext.region).updateAutoScalingGroup(request)
+			if (userContext.region.code == 'dal-1') {
+				// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+				def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+					[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+				log.warn resp1
+				log.warn 'tags = ' + autoScalingGroupData.tags
+				String serverid = autoScalingGroupData.tags.find { tag -> tag.key = 'rightscale_serverarrayid' }.value
+				log.warn 'serverid = ' + serverid
+				boolean launchAndTerminateShouldBeDisabled = suspendProcessTypes.contains(AutoScalingProcessType.Launch) && suspendProcessTypes.contains(AutoScalingProcessType.Terminate)
+				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, [
+					'server_array[elasticity_params][bounds][min_count]' : autoScalingGroupData.minSize.toString(),
+					'server_array[elasticity_params][bounds][max_count]' : autoScalingGroupData.maxSize.toString(),
+					'server_array[state]' : launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled'
+				])
+				log.warn resp2
+			}
+			else {
+				processTypesToSuspend.each {
+					suspendProcess(userContext, it, autoScalingGroupData.autoScalingGroupName, task)
+				}
+				processTypesToResume.each {
+					resumeProcess(userContext, it, autoScalingGroupData.autoScalingGroupName, task)
+				}
+				awsClient.by(userContext.region).updateAutoScalingGroup(request)
+			}
 
         }, Link.to(EntityType.autoScaling, autoScalingGroupData.autoScalingGroupName), existingTask)
 
@@ -1041,6 +1205,18 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
     List<LaunchConfiguration> retrieveLaunchConfigurations(Region region) {
         List<LaunchConfiguration> configs = []
+		if (region.code == 'dal-1') {
+			LaunchConfiguration config = new LaunchConfiguration(
+				launchConfigurationName : "fakeconfigname",
+				launchConfigurationARN : "fakearn",
+				imageId : "fakeimage",
+				keyName : "fakekeyname",
+				securityGroups : ["fakesecuritygroup"],
+				userData : "fakeuserdata"
+			)
+			configs.add(config);
+			return configs;
+		}
         DescribeLaunchConfigurationsResult result = retrieveLaunchConfigurationsForToken(region, null)
         while (true) {
             configs.addAll(result.getLaunchConfigurations())
@@ -1050,6 +1226,10 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             result = retrieveLaunchConfigurationsForToken(region, result.getNextToken())
         }
         configs.each { ensureUserDataIsDecodedAndTruncated(it) }
+		//configs.each { log.warn "LaunchConfiguration = " + it }
+		// LaunchConfiguration = {LaunchConfigurationName: acmeairwebappwlp-v002-20130807025337,
+		//LaunchConfigurationARN: arn:aws:autoscaling:us-east-1:665469383253:launchConfiguration:85ab917f-4e17-4d7d-80be-13647c782986:launchConfigurationName/acmeairwebappwlp-v002-20130807025337,
+		//ImageId: ami-fe3d7a97, KeyName: acmeair-netflix, SecurityGroups: [acmeair-netflix], UserData: export CLOUD_ENVIRONMENT=prod
         configs
     }
 
@@ -1079,9 +1259,23 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         if (from == From.CACHE) {
             return caches.allLaunchConfigurations.by(userContext.region).get(name)
         }
-        def result = awsClient.by(userContext.region).describeLaunchConfigurations(
-                new DescribeLaunchConfigurationsRequest().withLaunchConfigurationNames([name]))
-        List<LaunchConfiguration> launchConfigs = result.getLaunchConfigurations()
+		List<LaunchConfiguration> launchConfigs = []
+		if (userContext.region.code == 'dal-1') {
+			LaunchConfiguration config = new LaunchConfiguration(
+				launchConfigurationName : "fakeconfigname",
+				launchConfigurationARN : "fakearn",
+				imageId : "fakeimage",
+				keyName : "fakekeyname",
+				securityGroups : ["fakesecuritygroup"],
+				userData : "fakeuserdata"
+			)
+			launchConfigs.add(config);
+		}
+		else {
+			def result = awsClient.by(userContext.region).describeLaunchConfigurations(
+				new DescribeLaunchConfigurationsRequest().withLaunchConfigurationNames([name]))
+			launchConfigs = result.getLaunchConfigurations()
+		}
         if (launchConfigs.size() > 0) {
             LaunchConfiguration launchConfig = Check.lone(launchConfigs, LaunchConfiguration)
             ensureUserDataIsDecoded(launchConfig)
@@ -1150,19 +1344,29 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             result.launchConfigName = launchConfigName
             result.autoScalingGroupName = groupName
 
-            try {
-                createLaunchConfiguration(userContext, launchConfigName, launchConfigTemplate.imageId,
-                        launchConfigTemplate.keyName, securityGroups, userData,
-                        launchConfigTemplate.instanceType, launchConfigTemplate.kernelId,
-                        launchConfigTemplate.ramdiskId, launchConfigTemplate.iamInstanceProfile,
-                        launchConfigTemplate.spotPrice, launchConfigTemplate.ebsOptimized, task)
-                result.launchConfigCreated = true
-            } catch (AmazonServiceException launchConfigCreateException) {
-                result.launchConfigCreateException = launchConfigCreateException
-            }
+			if (userContext.region.code == 'dal-1') {
+				result.launchConfigCreated = true // liar liar pants on fire, but not needed until we support multiple instance types	
+			}
+			else {
+	            try {
+	                createLaunchConfiguration(userContext, launchConfigName, launchConfigTemplate.imageId,
+	                        launchConfigTemplate.keyName, securityGroups, userData,
+	                        launchConfigTemplate.instanceType, launchConfigTemplate.kernelId,
+	                        launchConfigTemplate.ramdiskId, launchConfigTemplate.iamInstanceProfile,
+	                        launchConfigTemplate.spotPrice, launchConfigTemplate.ebsOptimized, task)
+	                result.launchConfigCreated = true
+	            } catch (AmazonServiceException launchConfigCreateException) {
+	                result.launchConfigCreateException = launchConfigCreateException
+	            }
+			}
 
             try {
-                createAutoScalingGroup(userContext, groupTemplate, launchConfigName, suspendedProcesses, task)
+				if (userContext.region.code == 'dal-1') {
+					createAutoScalingGroupRightScale(userContext, groupTemplate, launchConfigTemplate, suspendedProcesses, task)
+				}
+				else {
+					createAutoScalingGroup(userContext, groupTemplate, launchConfigName, suspendedProcesses, task)
+				}
                 result.autoScalingGroupCreated = true
             } catch (AmazonServiceException autoScalingCreateException) {
                 result.autoScalingCreateException = autoScalingCreateException

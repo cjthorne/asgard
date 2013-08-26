@@ -84,7 +84,7 @@
         </tr>
         <tr class="prop">
           <td class="name">Desired Size:</td>
-          <td class="value subProperties">${group.desiredCapacity} <label>instance${group.desiredCapacity == 1 ? '' : 's'}</label></td>
+          <td class="value subProperties">${group.desiredCapacity ?: 'N/A'} <label>instance${group.desiredCapacity == 1 ? '' : 's'}</label></td>
         </tr>
         <tr class="prop" title="The number of seconds after a scaling activity completes before any further scaling activities can start">
           <td class="name">Cooldown:</td>

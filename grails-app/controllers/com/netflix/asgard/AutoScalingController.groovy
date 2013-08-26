@@ -431,7 +431,7 @@ class AutoScalingController {
         }
         final AutoScalingGroupData autoScalingGroupData = AutoScalingGroupData.forUpdate(
                 name, lcName, minSize, desiredCapacity, maxSize, defaultCooldown, healthCheckType,
-                healthCheckGracePeriod, terminationPolicies, availabilityZones
+                healthCheckGracePeriod, terminationPolicies, availabilityZones, asg.tags
         )
         try {
             awsAutoScalingService.updateAutoScalingGroup(userContext, autoScalingGroupData, suspendProcesses,

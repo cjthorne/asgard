@@ -24,6 +24,7 @@ class LoadingFilters {
     def filters = {
         all(controller: '(cache|init|healthcheck|server|firefox)', invert: true) {
             before = {
+				System.setProperty('skipCacheFill', 'true')
                 if (!initService.cachesFilled() && !System.getProperty('skipCacheFill')) {
                     render(status: HttpServletResponse.SC_SERVICE_UNAVAILABLE, view: '/loading')
                     return false

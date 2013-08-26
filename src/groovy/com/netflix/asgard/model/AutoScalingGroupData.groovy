@@ -102,14 +102,14 @@ class AutoScalingGroupData {
     static AutoScalingGroupData forUpdate(String name, String launchConfigurationName,
                                               minSize, desiredCapacity, maxSize, defaultCooldown,
                                               String healthCheckType, Integer healthCheckGracePeriod,
-                                              List<String> terminationPolicies, Collection<String> availabilityZones) {
+                                              List<String> terminationPolicies, Collection<String> availabilityZones, List<TagDescription> tags = []) {
 
         new AutoScalingGroupData(
                 name,
                 null,
                 minSize,
                 maxSize,
-                [],
+                tags,
                 healthCheckType,
                 healthCheckGracePeriod,
                 terminationPolicies,

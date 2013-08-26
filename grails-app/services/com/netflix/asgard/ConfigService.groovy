@@ -290,7 +290,35 @@ class ConfigService {
     String getSecretKey() {
         grailsApplication.config.secret?.secretKey ?: null
     }
+	
+	String getRightScaleEmail() {
+		grailsApplication.config.secretRightScale?.email ?: null
+	}
+	
+	String getRightScalePassword() {
+		grailsApplication.config.secretRightScale?.password ?: null
+	}
+	
+	String getRightScaleCloudId() {
+		grailsApplication.config.secretRightScale?.cloudId ?: null
+	}
+	
+	String getRightScaleAccountId() {
+		grailsApplication.config.secretRightScale?.accountId ?: null
+	}
 
+	String getRightScaleDeploymentId() {
+		grailsApplication.config.secretRightScale?.deploymentId ?: null
+	}
+	
+	String getRightScaleServerTemplateId() {
+		grailsApplication.config.secretRightScale?.serverTemplateId ?: null
+	}
+	
+	String getRightScaleMultiCloudImageRestHref() {
+		grailsApplication.config.secretRightScale?.multiCloudImageRestHref ?: null
+	}
+	
     String getAccessIdFileName() {
         grailsApplication.config.secret?.accessIdFileName ?: null
     }
