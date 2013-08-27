@@ -56,6 +56,7 @@ import com.amazonaws.services.ec2.model.DetachVolumeRequest
 import com.amazonaws.services.ec2.model.Filter
 import com.amazonaws.services.ec2.model.GetConsoleOutputRequest
 import com.amazonaws.services.ec2.model.GetConsoleOutputResult
+import com.amazonaws.services.ec2.model.GroupIdentifier
 import com.amazonaws.services.ec2.model.Image
 import com.amazonaws.services.ec2.model.Instance
 import com.amazonaws.services.ec2.model.InstanceState
@@ -63,6 +64,7 @@ import com.amazonaws.services.ec2.model.InstanceStateChange
 import com.amazonaws.services.ec2.model.IpPermission
 import com.amazonaws.services.ec2.model.KeyPairInfo
 import com.amazonaws.services.ec2.model.ModifyImageAttributeRequest
+import com.amazonaws.services.ec2.model.Monitoring
 import com.amazonaws.services.ec2.model.Placement
 import com.amazonaws.services.ec2.model.RebootInstancesRequest
 import com.amazonaws.services.ec2.model.RequestSpotInstancesRequest
@@ -103,6 +105,7 @@ import java.util.regex.Pattern
 import org.apache.commons.codec.binary.Base64
 import org.codehaus.groovy.grails.web.json.JSONElement
 import org.codehaus.groovy.grails.web.json.JSONArray
+import org.codehaus.groovy.grails.web.json.JSONObject
 import org.codehaus.groovy.runtime.StackTraceUtils
 import org.springframework.beans.factory.InitializingBean
 
@@ -201,12 +204,13 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		json.each {
 			log.warn "json image = " + it
 			String href = getRightScaleImageHref(it.links)
+			String imageId = href.substring(href.lastIndexOf('/')+1)
 			Tag tag = new Tag(
 				key : 'rightscale_imagehref',
 				value : href
 			)
 			Image image = new Image(
-				imageId: it.resource_uid,
+				imageId: imageId,
 				imageLocation: it.resource_uid + '/' + it.name,
 				state: 'available',
 				ownerId: '665469383253',
@@ -807,34 +811,80 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     // Instances
+	
+	private getImageIdFromRelLinks(JSONArray links) {
+		getIdFromRelLinks(links, 'image')
+	}
+	
+	private getInstanceIdFromRelLinks(JSONArray links) {
+		getIdFromRelLinks(links, 'self')
+	}
 
+	private getIdFromRelLinks(JSONArray links, String relName) {
+		def link = links.find { it.rel == relName }
+		if (link == null) {
+			return 'unavailable'
+		}
+		String href = link.href
+		href.substring(href.lastIndexOf('/') + 1)
+	}
+
+	private Instance getRightScaleInstance(String instanceId) {
+		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.warn resp1
+		JSONObject json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
+		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+		def instance = new Instance(
+			instanceId: json.links ? getInstanceIdFromRelLinks(json.links) : 'unavailable',
+			imageId: json.links ? getImageIdFromRelLinks(json.links) : 'unavailable',
+			instanceType: 'sl.fakesize',
+			launchTime: dateParser.parse(json.created_at),
+			publicIpAddress : json.public_ip_addresses[0] ?: '',
+			privateIpAddress : json.private_ip_addresses[0] ?: '',
+			).withState(
+				new InstanceState(code: 80, name: json.state)
+			).withPlacement(
+				new Placement(availabilityZone: 'DAL01', groupName: '', tenancy: 'default')
+			).withTags(
+				[ new Tag(key: 'Name', value: 'fake-name-tag-value') ]
+			).withMonitoring(new Monitoring(state : 'disabled'))
+		instance
+	}
+	
+	private List<Instance> getRightScaleInstances() {
+		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.warn resp1
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json?view=extended')
+		List<Instance> instances = []
+		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+		json.each {
+			log.warn "instance = " + it
+			def instance = new Instance(
+				instanceId: it.links ? getInstanceIdFromRelLinks(it.links) : 'unavailable',
+				imageId: it.links ? getImageIdFromRelLinks(it.links) : 'unavailable',
+				instanceType: 'sl.fakesize',
+				launchTime: dateParser.parse(it.created_at),
+				publicIpAddress : it.public_ip_addresses[0] ?: '',
+				privateIpAddress : it.private_ip_addresses[0] ?: '',
+				).withState(
+					new InstanceState(code: 80, name: it.state)
+				).withPlacement(
+					new Placement(availabilityZone: 'DAL01', groupName: '', tenancy: 'default')
+				).withTags(
+					[ new Tag(key: 'Name', value: 'fake-name-tag-value') ]
+				).withMonitoring(new Monitoring(state : 'disabled'))
+			instances.add(instance)
+		}
+		instances
+	}
+	
     private List<Instance> retrieveInstances(Region region) {
 		if (region.code == 'dal-1') {
-			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-			log.warn resp1
-			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json')
-			List<Instance> instances = []
-			def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-			json.each {
-				log.warn "instance = " + it
-				def instance = new Instance(
-					instanceId: it.name,
-					imageId: 'ami-fake',
-					instanceType: 'sl.fakesize',
-					launchTime: dateParser.parse(it.created_at),
-					).withState(
-						new InstanceState(code: 80, name: it.state)
-					).withPlacement(
-						new Placement(availabilityZone: 'DAL01', groupName: '', tenancy: 'default')
-					).withTags(
-						[ new Tag(key: 'Name', value: 'fake-name-tag-value') ]
-					)
-				instances.add(instance)
-			}
-		
-			return instances
+			return getRightScaleInstances()
 		}
 		
         List<Instance> instances = []
@@ -929,6 +979,17 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     Reservation getInstanceReservation(UserContext userContext, String instanceId) {
+		if (userContext.region.code == 'dal-1') {
+			Reservation res = new Reservation(
+				reservationId: 'r-fakereservationid',
+				ownerId: '665469383253',
+				groups: [new GroupIdentifier(groupName: 'fakegroup', groupId: 'sg-fakegroupid')],
+				groupNames: ['fakegroup'],
+				instances : [ getRightScaleInstance(instanceId) ]
+			)
+			return res
+		}
+		
         Check.notNull(instanceId, Reservation, "instanceId")
         def result
         try {

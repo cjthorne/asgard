@@ -105,7 +105,7 @@ class RestClientRightScaleService implements InitializingBean {
 
     def getAsJson(String uri, Integer timeoutMillis = 10000) {
         try {
-            String content = get(uri, 'application/json; charset=UTF-8', timeoutMillis)
+            String content = get(uri, 'application/json', timeoutMillis)
 
             // Strip JSONP padding if needed.
             return content ? JSON.parse(new JsonpStripper(content).stripPadding()) : null

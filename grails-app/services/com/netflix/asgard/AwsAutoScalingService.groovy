@@ -273,12 +273,21 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		return href.substring(href.lastIndexOf('/') + 1)
 	}
 			
+	private getIdFromRelLinks(JSONArray links, String relName) {
+		def link = links.find { it.rel == relName }
+		if (link == null) {
+			return 'unavailable'
+		}
+		String href = link.href
+		href.substring(href.lastIndexOf('/') + 1)
+	}
+
 	private List<AutoScalingGroup> retrieveAllRightScaleArrays() {
 		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays.json')
+		JSONArray jsonArrays = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays?view=instance_detail')
 		List<AutoScalingGroup> groups = []
-		json.each {
+		jsonArrays.each {
 			log.warn "array = " + it
 			String arrayId = getRightScaleServerArrayId(it.links)
 			TagDescription tag = new TagDescription(
@@ -292,17 +301,20 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				launchConfigurationName : 'fakeconfigname',
 				tags : [tag]
 			)
-			// TODO:  Figure out if I need to bring in the actual instance data
+			
+			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances')
 			List<Instance> instances = []
-			for (int ii = 0 ; ii < it.instances_count; ii++) instances.add(
-				new Instance(
-					instanceId : it.name + '_' + ii, // TODO - get real instance data
+			jsonInstances.each {
+				String instanceId = getIdFromRelLinks(it.links, 'self')
+				Instance instance = new Instance(
+					instanceId : instanceId, // TODO - get real instance data
 					availabilityZone: 'DAL01',
 					healthStatus: 'sick',
 					launchConfigurationName : 'fakeconfigname'
 					//lifeCycleState
 					)
-			)
+				instances.add(instance)
+			}
 			group.setInstances(instances)
 			groups.add(group)
 		}
