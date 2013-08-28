@@ -334,7 +334,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 	}
 
     private List<AutoScalingGroup> retrieveAutoScalingGroups(Region region) {
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return retrieveAllRightScaleArrays();
 		}
         List<AutoScalingGroup> groups = []
@@ -438,7 +438,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
                 return names.collect { caches.allAutoScalingGroups.by(userContext.region).get(it) }.findAll { it != null }
             }
 			List<AutoScalingGroup> groups
-			if (userContext.region.code == 'dal-1') {
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				groups = retrieveAllRightScaleArraysByNames(names)
 				log.warn groups
 			}
@@ -498,7 +498,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     static final Integer UNLIMITED = Integer.MAX_VALUE
 
     List<Activity> getAutoScalingGroupActivities(UserContext userContext, String name, Integer maxTotalActivities) {
-		if (userContext.region.code == 'dal-1') {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
 			return []
 		}
         List<Activity> activities = []
@@ -568,7 +568,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     private List<ScalingPolicy> retrieveScalingPolicies(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         scalingPolicyRetriever.retrieve(region, new DescribePoliciesRequest())
     }
 
@@ -589,7 +589,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describePolicies(DescribePoliciesRequest)
      */
     List<ScalingPolicy> getScalingPoliciesForGroup(UserContext userContext, String autoScalingGroupName) {
-		if (userContext.region.code == 'dal-1') {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
 			return []
 		}
         if (!autoScalingGroupName) { return [] }
@@ -733,7 +733,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describeScheduledActions(DescribeScheduledActionsRequest)
      */
     List<ScheduledUpdateGroupAction> getScheduledActionsForGroup(UserContext userContext, String autoScalingGroupName) {
-		if (userContext.region.code == 'dal-1') {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
 			return []
 		}
         if (!autoScalingGroupName) { return [] }
@@ -742,7 +742,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     private List<ScheduledUpdateGroupAction> retrieveScheduledActions(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         scheduledActionRetriever.retrieve(region, new DescribeScheduledActionsRequest())
     }
 
@@ -862,7 +862,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		String name = groupTemplate.autoScalingGroupName
 	
 		taskService.runTask(userContext, "Create Autoscaling Group '${name}'", { Task task ->
-			Image image = caches.allImages.by(Region.DAL05).get(launchConfigTemplate.imageId)
+			Image image = caches.allImages.by(Region.SL_US).get(launchConfigTemplate.imageId)
 			String imageHref = image.tags.find { it.key = 'rightscale_imagehref'}.value
 			String deploymentId = configService.getRightScaleDeploymentId()
 			String templateId = configService.getRightScaleServerTemplateId()
@@ -1009,7 +1009,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         }
 
         taskService.runTask(userContext, "Update Autoscaling Group '${autoScalingGroupData.autoScalingGroupName}'", { Task task ->
-			if (userContext.region.code == 'dal-1') {
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 				def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 					[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
@@ -1217,7 +1217,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
     List<LaunchConfiguration> retrieveLaunchConfigurations(Region region) {
         List<LaunchConfiguration> configs = []
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			LaunchConfiguration config = new LaunchConfiguration(
 				launchConfigurationName : "fakeconfigname",
 				launchConfigurationARN : "fakearn",
@@ -1272,7 +1272,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             return caches.allLaunchConfigurations.by(userContext.region).get(name)
         }
 		List<LaunchConfiguration> launchConfigs = []
-		if (userContext.region.code == 'dal-1') {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
 			LaunchConfiguration config = new LaunchConfiguration(
 				launchConfigurationName : "fakeconfigname",
 				launchConfigurationARN : "fakearn",
@@ -1356,7 +1356,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             result.launchConfigName = launchConfigName
             result.autoScalingGroupName = groupName
 
-			if (userContext.region.code == 'dal-1') {
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				result.launchConfigCreated = true // liar liar pants on fire, but not needed until we support multiple instance types	
 			}
 			else {
@@ -1373,7 +1373,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			}
 
             try {
-				if (userContext.region.code == 'dal-1') {
+				if (userContext.region.code == Region.SL_US_REGION_CODE) {
 					createAutoScalingGroupRightScale(userContext, groupTemplate, launchConfigTemplate, suspendedProcesses, task)
 				}
 				else {

@@ -161,10 +161,10 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 
     private List<AvailabilityZone> retrieveAvailabilityZones(Region region) {
 		def List<AvailabilityZone> result
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			result = [
-				new AvailabilityZone(zoneName : 'DAL01', state : 'available', regionName : 'dal-1'),
-				new AvailabilityZone(zoneName : 'DAL05', state : 'available', regionName : 'dal-1')
+				new AvailabilityZone(zoneName : 'DAL05', state : 'available', regionName : Region.SL_US_REGION_CODE),
+				new AvailabilityZone(zoneName : 'SJC01', state : 'available', regionName : Region.SL_US_REGION_CODE)
 			]
 		}
 		else {
@@ -235,7 +235,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		return images
 	}
     private List<Image> retrieveImages(Region region) {
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return retrieveAllRightScaleImages(region)
 		}
 		
@@ -285,7 +285,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private Collection<Subnet> retrieveSubnets(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         awsClient.by(region).describeSubnets().subnets
     }
 
@@ -300,7 +300,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private Collection<Vpc> retrieveVpcs(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         awsClient.by(region).describeVpcs().vpcs
     }
 
@@ -350,7 +350,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
                 if (image) { return image }
             }
 			List<Image> images = []
-			if (userContext.region.code == 'dal-1') {
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				images = retrieveAllRightScaleImages(userContext.region)
 				images = images.findAll { it.imageId == imageId }
 			}
@@ -482,7 +482,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<KeyPairInfo> retrieveKeys(Region region) {
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return [
 				new KeyPairInfo(keyName: 'fakekey', keyFingerprint : 'XXXXXX')
 			]
@@ -515,7 +515,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<SecurityGroup> retrieveSecurityGroups(Region region) {
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return [new SecurityGroup(
 				ownerId: '12345',
 				groupName: 'default',
@@ -788,7 +788,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Spot Instance Requests
 
     List<SpotInstanceRequest> retrieveSpotInstanceRequests(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         awsClient.by(region).describeSpotInstanceRequests().spotInstanceRequests
     }
 
@@ -883,7 +883,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 	
     private List<Instance> retrieveInstances(Region region) {
-		if (region.code == 'dal-1') {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return getRightScaleInstances()
 		}
 		
@@ -979,7 +979,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     Reservation getInstanceReservation(UserContext userContext, String instanceId) {
-		if (userContext.region.code == 'dal-1') {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
 			Reservation res = new Reservation(
 				reservationId: 'r-fakereservationid',
 				ownerId: '665469383253',
@@ -1116,7 +1116,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     // Reservations
 
     private List<ReservedInstances> retrieveReservations(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         awsClient.by(region).describeReservedInstances().reservedInstances
     }
 
@@ -1168,7 +1168,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<Volume> retrieveVolumes(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         awsClient.by(region).describeVolumes(new DescribeVolumesRequest()).volumes
     }
 
@@ -1241,7 +1241,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     private List<Snapshot> retrieveSnapshots(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         List<String> owners = configService.publicResourceAccounts + configService.awsAccounts
         DescribeSnapshotsRequest request = new DescribeSnapshotsRequest().withOwnerIds(owners)
         awsClient.by(region).describeSnapshots(request).snapshots

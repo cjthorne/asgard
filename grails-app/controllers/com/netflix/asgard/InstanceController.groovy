@@ -148,7 +148,7 @@ class InstanceController {
     def show = {
         UserContext userContext = UserContext.of(request)
 		String inputId = params.instanceId ?: params.id
-        String instanceId = userContext.region.code == 'dal-1' ? inputId : EntityType.instance.ensurePrefix(inputId)
+        String instanceId = userContext.region.code == Region.SL_US_REGION_CODE ? inputId : EntityType.instance.ensurePrefix(inputId)
         String appName
         ApplicationInstance appInst
         if (params.appName) {

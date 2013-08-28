@@ -55,7 +55,7 @@ class AwsSqsService implements CacheInitializer, InitializingBean {
     // Queues
 
     private List<SimpleQueue> retrieveQueues(Region region) {
-		if (region.code == 'dal-1') return []
+		if (region.code == Region.SL_US_REGION_CODE) return []
         try {
             return awsClient.by(region).listQueues(new ListQueuesRequest()).queueUrls.collect { new SimpleQueue(it) }
         } catch (AmazonServiceException ase) {
