@@ -69,7 +69,7 @@ enum Region {
     ),
 
 	SL_US('sl-1',
-		'sl-1',
+		'us-east-1', // until pricing is working
 		'sl-1.png',
 		'Dallas'
 	)
