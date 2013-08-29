@@ -875,22 +875,29 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
 			log.warn resp1
 			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', [
-				'server_array[name]' : arrayName,
-				'server_array[description]' : arrayDesc,
-				'server_array[deployment_href]' : '/api/deployments/' + deploymentId,
-				'server_array[array_type]' : 'alert',
-				'server_array[state]' : 'disabled',
-				'server_array[instance][server_template_href]' : '/api/server_templates/' + templateId,
-				'server_array[instance][cloud_href]' : '/api/clouds/' + cloudId,
-				'server_array[instance][image_href]' : imageHref,
-				'server_array[instance][multi_cloud_image_href]' : configService.getRightScaleMultiCloudImageRestHref(),
-				'server_array[elasticity_params][alert_specific_params][decision_threshold]' : '51',
-				'server_array[elasticity_params][bounds][min_count]' : groupTemplate.minSize.toString(),
-				'server_array[elasticity_params][bounds][max_count]' : groupTemplate.maxSize.toString(),
-				'server_array[elasticity_params][pacing][resize_calm_time]' : '5',
-				'server_array[elasticity_params][pacing][resize_down_by]' : '1',
-				'server_array[elasticity_params][pacing][resize_up_by]' : '1',
-				'server_array[state]' : 'enabled'
+				['server_array[name]', arrayName],
+				['server_array[description]', arrayDesc],
+				['server_array[deployment_href]', '/api/deployments/' + deploymentId],
+				['server_array[array_type]', 'alert'],
+				['server_array[state]', 'enabled'],
+				['server_array[instance][server_template_href]', '/api/server_templates/' + templateId],
+				['server_array[instance][cloud_href]', '/api/clouds/' + cloudId],
+				['server_array[instance][image_href]', imageHref],
+				['server_array[instance][multi_cloud_image_href]', configService.getRightScaleMultiCloudImageRestHref()],
+				['server_array[elasticity_params][alert_specific_params][decision_threshold]', '51'],
+				['server_array[elasticity_params][bounds][min_count]', groupTemplate.minSize.toString()],
+				['server_array[elasticity_params][bounds][max_count]', groupTemplate.maxSize.toString()],
+				['server_array[elasticity_params][pacing][resize_calm_time]', '5'],
+				['server_array[elasticity_params][pacing][resize_down_by]', '1'],
+				['server_array[elasticity_params][pacing][resize_up_by]', '1'],
+				['server_array[state]', 'enabled'],
+				// TODO: Get this pulling info from datacenters from request and weighting
+				['server_array[datacenter_policy][][datacenter_href]', '/api/clouds/1869/datacenters/ALQ0BJ3NGVM4G'],
+				['server_array[datacenter_policy][][max]', groupTemplate.maxSize.toString()],
+				['server_array[datacenter_policy][][weight]', '50.0'],
+				['server_array[datacenter_policy][][datacenter_href]', '/api/clouds/1869/datacenters/CFMJDIE09B8C8'],
+				['server_array[datacenter_policy][][max]', groupTemplate.maxSize.toString()],
+				['server_array[datacenter_policy][][weight]', '50.0']
 			])
 			log.warn resp2
 			suspendedProcesses.each {

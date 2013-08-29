@@ -194,6 +194,23 @@ class RestClientRightScaleService implements InitializingBean {
         executePost(httpPost)
     }
 
+	/**
+	 * Note: Use this version if you have multiple query parameters of the same name
+	 * @param uriPath the remote destination
+	 * @param query the name-value pairs to pass in the post body
+	 * @return int the HTTP response code
+	 */
+	int post(String uriPath, List<List<String>> query) {
+		HttpPost httpPost = new HttpPost(uriPath)
+		httpPost.setHeader('X_API_VERSION', '1.5')
+		List<BasicNameValuePair> params = []
+		query.each{
+			params.add(new BasicNameValuePair(it[0], it[1]))
+		}
+		httpPost.setEntity(new UrlEncodedFormEntity(params))
+		executePost(httpPost)
+	}
+
     /**
      * @param uriPath the remote destination
      * @param xml the XML string to pass in the post body, excluding the xml header line
