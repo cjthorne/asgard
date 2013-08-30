@@ -1028,7 +1028,13 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, [
 					'server_array[elasticity_params][bounds][min_count]' : autoScalingGroupData.minSize.toString(),
 					'server_array[elasticity_params][bounds][max_count]' : autoScalingGroupData.maxSize.toString(),
-					'server_array[state]' : launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled'
+					'server_array[state]' : launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled',
+					'server_array[datacenter_policy][][datacenter_href]' : '/api/clouds/1869/datacenters/ALQ0BJ3NGVM4G',
+					'server_array[datacenter_policy][][max]' : autoScalingGroupData.maxSize.toString(),
+					'server_array[datacenter_policy][][weight]' : '50.0',
+					'server_array[datacenter_policy][][datacenter_href]' : '/api/clouds/1869/datacenters/CFMJDIE09B8C8',
+					'server_array[datacenter_policy][][max]' : autoScalingGroupData.maxSize.toString(),
+					'server_array[datacenter_policy][][weight]' : '50.0'
 				])
 				log.warn resp2
 			}
