@@ -308,7 +308,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				String instanceId = getIdFromRelLinks(it.links, 'self')
 				Instance instance = new Instance(
 					instanceId : instanceId, // TODO - get real instance data
-					availabilityZone: 'DAL01',
+					availabilityZone: 'notreally-DAL01',
 					healthStatus: 'sick',
 					launchConfigurationName : 'fakeconfigname'
 					//lifeCycleState

@@ -873,9 +873,9 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 				).withState(
 					new InstanceState(code: 80, name: it.state)
 				).withPlacement(
-					new Placement(availabilityZone: 'DAL01', groupName: '', tenancy: 'default')
+					new Placement(availabilityZone: 'notreally-DAL01', groupName: '', tenancy: 'default')
 				).withTags(
-					[ new Tag(key: 'Name', value: 'fake-name-tag-value') ]
+					[ new Tag(key: 'Name', value: it.name) ]
 				).withMonitoring(new Monitoring(state : 'disabled'))
 			instances.add(instance)
 		}
