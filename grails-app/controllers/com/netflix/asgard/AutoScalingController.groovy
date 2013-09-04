@@ -159,6 +159,9 @@ class AutoScalingController {
                     new Duration(Time.now(), dayAfterExpire).isShorterThan(maxExpirationDuration)
             String lcName = groupData?.launchConfigurationName
             LaunchConfiguration launchConfig = awsAutoScalingService.getLaunchConfiguration(userContext, lcName)
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+				launchConfig.imageId = groupData?.tags.find { tag -> tag.key == 'rightscale_next_instance_image_id' }.value
+			}
             Image image = awsEc2Service.getImage(userContext, launchConfig?.imageId, From.CACHE)
 
             Collection<String> alarmNames = scalingPolicies.collect { it.alarms*.alarmName }.flatten()

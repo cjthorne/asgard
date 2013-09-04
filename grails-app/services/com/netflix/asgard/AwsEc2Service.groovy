@@ -199,7 +199,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
 		log.warn resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
-		List<Instance> images = []
+		List<Image> images = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
 			log.warn "json image = " + it
@@ -234,6 +234,44 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		log.warn 'images = ' + images
 		return images
 	}
+	
+	private List<Image> retrieveRightScaleImage(String imageId) {
+		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.warn resp1
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
+		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+		String href = getRightScaleImageHref(it.links)
+		String imageId2 = href.substring(href.lastIndexOf('/')+1)
+		Tag tag = new Tag(
+			key : 'rightscale_imagehref',
+			value : href
+		)
+		Image image = new Image(
+			imageId: imageId2,
+			imageLocation: it.resource_uid + '/' + it.name,
+			state: 'available',
+			ownerId: '665469383253',
+			//public: false,
+			//productCodes: [],
+			architecture: it.cpu_architecture,
+			imageType: it.image_type,
+			kernelId: 'aki-fakeid',
+			name: it.name,
+			//description: ,
+			rootDeviceType: 'ebs',
+			rootDeviceName: '/dev/sda1',
+			//BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
+			virtualizationType: 'paravirtual',
+			//Tags: [],
+			hypervisor: 'fakehv').
+			withTags([tag])
+			
+		log.warn "image = " + image
+		image
+	}
+
     private List<Image> retrieveImages(Region region) {
 		if (region.code == Region.SL_US_REGION_CODE) {
 			return retrieveAllRightScaleImages(region)
@@ -370,6 +408,9 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     }
 
     List<String> getImageLaunchers(UserContext userContext, String imageId) {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			return ['fakeLauncher']
+		}
         DescribeImageAttributeRequest request = new DescribeImageAttributeRequest()
                 .withImageId(imageId)
                 .withAttribute('launchPermission')

@@ -268,9 +268,11 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     // Auto Scaling Groups
 			
 	private String getRightScaleServerArrayId(JSONArray links) {
-		def selflink = links.find { it.rel == 'self' }
-		String href = selflink.href
-		return href.substring(href.lastIndexOf('/') + 1)
+		getIdFromRelLinks(links, 'self')
+	}
+	
+	private getRightScaleServerArrayFirstInstanceId(JSONArray links) {
+		getIdFromRelLinks(links, 'next_instance')
 	}
 			
 	private getIdFromRelLinks(JSONArray links, String relName) {
@@ -290,16 +292,26 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		jsonArrays.each {
 			log.warn "array = " + it
 			String arrayId = getRightScaleServerArrayId(it.links)
-			TagDescription tag = new TagDescription(
+			String nextInstanceId = getRightScaleServerArrayFirstInstanceId(it.links) ?: 'unknown'
+			TagDescription tag1 = new TagDescription(
 				key : 'rightscale_serverarrayid',
 				value : arrayId
+			)
+			TagDescription tag2 = new TagDescription(
+				key : 'rightscale_next_instance_id',
+				value : nextInstanceId
+			)
+			com.amazonaws.services.ec2.model.Instance nextInstance = awsEc2Service.getRightScaleInstance(nextInstanceId)
+			TagDescription tag3 = new TagDescription(
+				key : 'rightscale_next_instance_image_id',
+				value : nextInstance.imageId
 			)
 			def AutoScalingGroup group = new AutoScalingGroup(
 				autoScalingGroupName : it.name,
 				minSize : it.elasticity_params.bounds.min_count.toInteger(),
 				maxSize : it.elasticity_params.bounds.max_count.toInteger(),
 				launchConfigurationName : 'fakeconfigname',
-				tags : [tag]
+				tags : [tag1, tag2, tag3]
 			)
 			
 			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances')
