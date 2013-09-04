@@ -1249,9 +1249,9 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				imageId : "fakeimage",
 				keyName : "fakekeyname",
 				securityGroups : ["fakesecuritygroup"],
-				userData : "fakeuserdata"
-			)
+			).withUserData('fakeuserdata'.encodeAsBase64())
 			configs.add(config);
+			configs.each { ensureUserDataIsDecodedAndTruncated(it) }
 			return configs;
 		}
         DescribeLaunchConfigurationsResult result = retrieveLaunchConfigurationsForToken(region, null)
@@ -1304,8 +1304,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				imageId : "fakeimage",
 				keyName : "fakekeyname",
 				securityGroups : ["fakesecuritygroup"],
-				userData : "fakeuserdata"
-			)
+			).withUserData('fakeuserdata'.encodeAsBase64())
 			launchConfigs.add(config);
 		}
 		else {
