@@ -15,6 +15,8 @@
  */
 package com.netflix.asgard
 
+import java.util.List;
+
 import com.amazonaws.AmazonServiceException
 import com.amazonaws.services.autoscaling.AmazonAutoScaling
 import com.amazonaws.services.autoscaling.model.Activity
@@ -308,7 +310,8 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				key : 'rightscale_next_instance_image_id',
 				value : nextInstance.imageId
 			)
-			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' }
+			
+			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' && policy.weight != '0' }
 			List<String> datacenters = nonZeroDCs*.datacenter_href;
 			
 			List<AvailabilityZone> azs = awsEc2Service.retrieveAvailabilityZones(Region.SL_US)
@@ -911,7 +914,8 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
 			log.warn resp1
-			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', [
+			
+			List<List<String>> params = [
 				['server_array[name]', arrayName],
 				['server_array[description]', arrayDesc],
 				['server_array[deployment_href]', '/api/deployments/' + deploymentId],
@@ -926,22 +930,40 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				['server_array[elasticity_params][bounds][max_count]', groupTemplate.maxSize.toString()],
 				['server_array[elasticity_params][pacing][resize_calm_time]', '5'],
 				['server_array[elasticity_params][pacing][resize_down_by]', '1'],
-				['server_array[elasticity_params][pacing][resize_up_by]', '1'],
-				['server_array[state]', 'enabled'],
-				// TODO: Get this pulling info from datacenters from request and weighting
-				['server_array[datacenter_policy][][datacenter_href]', '/api/clouds/1869/datacenters/ALQ0BJ3NGVM4G'],
-				['server_array[datacenter_policy][][max]', groupTemplate.maxSize.toString()],
-				['server_array[datacenter_policy][][weight]', '50.0'],
-				['server_array[datacenter_policy][][datacenter_href]', '/api/clouds/1869/datacenters/CFMJDIE09B8C8'],
-				['server_array[datacenter_policy][][max]', groupTemplate.maxSize.toString()],
-				['server_array[datacenter_policy][][weight]', '50.0']
-			])
+				['server_array[elasticity_params][pacing][resize_up_by]', '1']
+			]
+			def List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(groupTemplate.availabilityZones, groupTemplate.maxSize)
+			
+			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', params + dcPolicy)
 			log.warn resp2
 			suspendedProcesses.each {
 				suspendProcess(userContext, it, name, task)
 			}
 		}, Link.to(EntityType.autoScaling, name), existingTask)
 		getAutoScalingGroup(userContext, name)
+	}
+		
+	List<List<String>> getRightScaleDataCenterPolicy(List<String> selectedAZs, int maximum) {
+		def List<AvailabilityZone> allAzs = awsEc2Service.getAvailabilityZones(Region.SL_US)
+		def List<List<String>> allDcPolicies = []
+		def int weight = 100 / selectedAZs.size()
+		def int lastweight = weight + 100 % selectedAZs.size()
+		allAzs.eachWithIndex { az, index ->
+			def String azName = az.zoneName
+			def String datacenterId = az.messages[0].message
+			def boolean selected = azName in selectedAZs
+			def String w = selected ? ((allAzs.size == index - 1) ? lastWeight : weight) : '0'
+			def String maxInstances = selected ? maximum.toString() : '0'
+			def List<List<String>> dcPolicy = [
+				['server_array[datacenter_policy][][datacenter_href]',
+					'/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters/' + datacenterId],
+				['server_array[datacenter_policy][][max]', maxInstances],
+				['server_array[datacenter_policy][][weight]', w]
+			]
+			allDcPolicies = allDcPolicies + dcPolicy
+		}
+		log.warn 'allDcPolicies = ' + allDcPolicies 
+		allDcPolicies
 	}
 	
     /**
@@ -1062,17 +1084,16 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				String serverid = autoScalingGroupData.tags.find { tag -> tag.key = 'rightscale_serverarrayid' }.value
 				log.warn 'serverid = ' + serverid
 				boolean launchAndTerminateShouldBeDisabled = suspendProcessTypes.contains(AutoScalingProcessType.Launch) && suspendProcessTypes.contains(AutoScalingProcessType.Terminate)
-				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, [
-					'server_array[elasticity_params][bounds][min_count]' : autoScalingGroupData.minSize.toString(),
-					'server_array[elasticity_params][bounds][max_count]' : autoScalingGroupData.maxSize.toString(),
-					'server_array[state]' : launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled',
-					'server_array[datacenter_policy][][datacenter_href]' : '/api/clouds/1869/datacenters/ALQ0BJ3NGVM4G',
-					'server_array[datacenter_policy][][max]' : autoScalingGroupData.maxSize.toString(),
-					'server_array[datacenter_policy][][weight]' : '50.0',
-					'server_array[datacenter_policy][][datacenter_href]' : '/api/clouds/1869/datacenters/CFMJDIE09B8C8',
-					'server_array[datacenter_policy][][max]' : autoScalingGroupData.maxSize.toString(),
-					'server_array[datacenter_policy][][weight]' : '50.0'
-				])
+				
+				List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(autoScalingGroupData.availabilityZones, autoScalingGroupData.maxSize)
+				
+				List<List<String>> params = [
+					['server_array[elasticity_params][bounds][min_count]' , autoScalingGroupData.minSize.toString()],
+					['server_array[elasticity_params][bounds][max_count]' , autoScalingGroupData.maxSize.toString()],
+					['server_array[state]', launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled']
+				] 
+
+				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, params + dcPolicy)
 				log.warn resp2
 			}
 			else {

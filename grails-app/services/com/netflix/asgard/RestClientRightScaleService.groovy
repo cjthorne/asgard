@@ -243,6 +243,23 @@ class RestClientRightScaleService implements InitializingBean {
         }
     }
 
+	/**
+	 * Note: Use this version if you have multiple query parameters of the same name
+	 * @param uriPath the remote destination
+	 * @param query the name-value pairs to pass in the post body
+	 * @return int the HTTP response code
+	 */
+	int put(String uri, List<List<String>> query) {
+		def put = new HttpPut(uri)
+		put.setHeader('X_API_VERSION', '1.5')
+		List<BasicNameValuePair> params = []
+		query.each{
+			params.add(new BasicNameValuePair(it[0], it[1]))
+		}
+		put.setEntity(new UrlEncodedFormEntity(params))
+		executeAndProcessResponse(put, readStatusCode) as int
+	}
+	
     int put(String uri, Map<String, String> query = [:]) {
 		def put = new HttpPut(uri)
 		put.setEntity(new UrlEncodedFormEntity(query.collect { key, value ->

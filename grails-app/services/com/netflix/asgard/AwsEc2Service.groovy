@@ -195,8 +195,12 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
         result.sort { it.zoneName }
     }
 
+	Collection<AvailabilityZone> getAvailabilityZones(Region region) {
+		caches.allAvailabilityZones.by(region).list().sort { it.zoneName }
+	}
+	
     Collection<AvailabilityZone> getAvailabilityZones(UserContext userContext) {
-        caches.allAvailabilityZones.by(userContext.region).list().sort { it.zoneName }
+        getAvailabilityZones(userContext.region)
     }
 
     Collection<AvailabilityZone> getRecommendedAvailabilityZones(UserContext userContext) {
