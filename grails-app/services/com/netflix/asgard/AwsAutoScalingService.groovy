@@ -52,6 +52,7 @@ import com.amazonaws.services.autoscaling.model.TagDescription
 import com.amazonaws.services.autoscaling.model.TerminateInstanceInAutoScalingGroupRequest
 import com.amazonaws.services.autoscaling.model.UpdateAutoScalingGroupRequest
 import com.amazonaws.services.cloudwatch.model.MetricAlarm
+import com.amazonaws.services.ec2.model.AvailabilityZone
 import com.amazonaws.services.ec2.model.Image
 import com.amazonaws.services.ec2.model.Placement
 import com.amazonaws.services.ec2.model.SecurityGroup
@@ -75,6 +76,7 @@ import com.netflix.asgard.retriever.AwsResultsRetriever
 import com.netflix.frigga.ami.AppVersion
 import groovyx.gpars.GParsExecutorsPool
 import org.codehaus.groovy.grails.web.json.JSONArray
+import org.codehaus.groovy.grails.web.json.JSONObject
 import org.joda.time.DateTime
 import org.joda.time.Duration
 import org.springframework.beans.factory.InitializingBean
@@ -306,12 +308,35 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				key : 'rightscale_next_instance_image_id',
 				value : nextInstance.imageId
 			)
+			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' }
+			List<String> datacenters = nonZeroDCs*.datacenter_href;
+			
+			List<AvailabilityZone> azs = awsEc2Service.retrieveAvailabilityZones(Region.SL_US)
+			List<String> azNames = []
+			
+			datacenters.each { dc->
+				def String datacenterId = dc.substring(dc.lastIndexOf('/') + 1)
+				AvailabilityZone az = azs.find { az ->
+					def messages = az.messages
+					boolean match = messages.find { message ->
+						message.message == datacenterId
+					}.any()
+					if (match) {
+						azNames.add(az.zoneName)
+					}
+				}
+				log.warn 'az = ' + az
+			}
+			
+			log.warn 'azNames = ' + azNames
+			
 			def AutoScalingGroup group = new AutoScalingGroup(
 				autoScalingGroupName : it.name,
 				minSize : it.elasticity_params.bounds.min_count.toInteger(),
 				maxSize : it.elasticity_params.bounds.max_count.toInteger(),
 				launchConfigurationName : 'fakeconfigname',
-				tags : [tag1, tag2, tag3]
+				tags : [tag1, tag2, tag3],
+				availabilityZones: azNames
 			)
 			
 			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances')

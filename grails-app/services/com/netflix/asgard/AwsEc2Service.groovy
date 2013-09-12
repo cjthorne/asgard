@@ -22,6 +22,7 @@ import com.amazonaws.services.ec2.model.AssociateAddressRequest
 import com.amazonaws.services.ec2.model.AttachVolumeRequest
 import com.amazonaws.services.ec2.model.AuthorizeSecurityGroupIngressRequest
 import com.amazonaws.services.ec2.model.AvailabilityZone
+import com.amazonaws.services.ec2.model.AvailabilityZoneMessage
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsRequest
 import com.amazonaws.services.ec2.model.CancelSpotInstanceRequestsResult
 import com.amazonaws.services.ec2.model.CreateSecurityGroupRequest
@@ -162,10 +163,27 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     private List<AvailabilityZone> retrieveAvailabilityZones(Region region) {
 		def List<AvailabilityZone> result
 		if (region.code == Region.SL_US_REGION_CODE) {
-			result = [
-				new AvailabilityZone(zoneName : 'DAL05', state : 'available', regionName : Region.SL_US_REGION_CODE),
-				new AvailabilityZone(zoneName : 'SJC01', state : 'available', regionName : Region.SL_US_REGION_CODE)
-			]
+			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+			log.warn resp1
+			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters')
+			def List<AvailabilityZone> zones = []
+			json.each {
+				log.warn "instance = " + it
+				// {"description":"DAL05 - Dallas - Central U.S.",
+				// "name":"DAL05 - Dallas - Central U.S.",
+				// "links":[
+				//    {"rel":"self","href":"/api/clouds/1869/datacenters/CFMJDIE09B8C8"},
+				//    {"rel":"cloud","href":"/api/clouds/1869"}
+				// ],"resource_uid":"138124","actions":[]}
+				def String zoneName = it.name.split()[0]
+				def String datacenterid = getIdFromRelLinks(it.links, 'self')
+				def AvailabilityZone az = new AvailabilityZone(zoneName : zoneName, state : 'available', regionName : Region.SL_US_REGION_CODE)
+				def AvailabilityZoneMessage message = new AvailabilityZoneMessage(message: datacenterid)
+				az.setMessages([message]) 
+				zones.add(az)
+			}
+			return zones.sort { it.zoneName }
 		}
 		else {
 			result = awsClient.by(region).describeAvailabilityZones(new DescribeAvailabilityZonesRequest()).getAvailabilityZones()
