@@ -42,6 +42,7 @@ import com.netflix.asgard.EmailerService
 import com.netflix.asgard.EurekaAddressCollectorService
 import com.netflix.asgard.FastPropertyService
 import com.netflix.asgard.FlagService
+import com.netflix.asgard.IdService
 import com.netflix.asgard.InstanceTypeService
 import com.netflix.asgard.LaunchTemplateService
 import com.netflix.asgard.Link
@@ -59,10 +60,12 @@ import com.netflix.asgard.StackService
 import com.netflix.asgard.Task
 import com.netflix.asgard.TaskService
 import com.netflix.asgard.ThreadScheduler
+import com.netflix.asgard.Time
 import com.netflix.asgard.UserContext
 import com.netflix.asgard.cache.Fillable
 import com.netflix.asgard.model.HardwareProfile
 import com.netflix.asgard.model.InstanceTypeData
+import com.netflix.asgard.model.SimpleDbSequenceLocator
 import com.netflix.asgard.plugin.UserDataProvider
 import grails.converters.JSON
 import grails.converters.XML
@@ -102,8 +105,8 @@ class Mocks {
             monkeyPatcherService()
     }
 
-    private static def grailsApplication
-    static def grailsApplication() {
+    private static grailsApplication
+    static grailsApplication() {
         if (grailsApplication == null) {
             grailsApplication = [
                     config: [
@@ -155,8 +158,8 @@ class Mocks {
         caches
     }
 
-    private static def monkeyPatcherService
-    static def monkeyPatcherService() {
+    private static MonkeyPatcherService monkeyPatcherService
+    static MonkeyPatcherService monkeyPatcherService() {
         if (monkeyPatcherService == null) {
             MockUtils.mockLogging(MonkeyPatcherService, false)
             monkeyPatcherService = new MonkeyPatcherService()
@@ -198,7 +201,7 @@ class Mocks {
         applicationService
     }
 
-    private static def item(String name) {
+    private static Item item(String name) {
         new Item().withName(name).withAttributes(
                 [new Attribute('createTs', '1279755598817'), new Attribute('updateTs', '1279755598817')])
     }
@@ -360,6 +363,11 @@ class Mocks {
             taskService.grailsApplication = grailsApplication()
             taskService.emailerService = emailerService()
             taskService.awsSimpleDbService = awsSimpleDbService()
+            taskService.idService = new IdService() {
+                String nextId(UserContext userContext, SimpleDbSequenceLocator sequenceLocator) {
+                    '1'
+                }
+            }
         }
         taskService
     }
@@ -369,7 +377,7 @@ class Mocks {
         if (emailerService == null) {
             MockUtils.mockLogging(EmailerService, false)
             emailerService = new EmailerService()
-            emailerService.grailsApplication = grailsApplication()
+            emailerService.configService = configService()
             emailerService.afterPropertiesSet()
         }
         emailerService
@@ -652,7 +660,7 @@ class Mocks {
 
     static void waitForFill(Fillable cache) {
         while (!cache.filled) {
-            sleep 10
+            Time.sleepCancellably(10)
         }
     }
 

@@ -24,7 +24,6 @@ import com.amazonaws.services.autoscaling.model.Alarm
 import com.amazonaws.services.autoscaling.model.AutoScalingGroup
 import com.amazonaws.services.autoscaling.model.BlockDeviceMapping
 import com.amazonaws.services.autoscaling.model.CreateAutoScalingGroupRequest
-import com.amazonaws.services.autoscaling.model.CreateLaunchConfigurationRequest
 import com.amazonaws.services.autoscaling.model.DeleteAutoScalingGroupRequest
 import com.amazonaws.services.autoscaling.model.DeleteLaunchConfigurationRequest
 import com.amazonaws.services.autoscaling.model.DeletePolicyRequest
@@ -64,10 +63,12 @@ import com.netflix.asgard.cache.CacheInitializer
 import com.netflix.asgard.flow.LogMessage;
 import com.netflix.asgard.model.AlarmData
 import com.netflix.asgard.model.ApplicationInstance
+import com.netflix.asgard.model.AutoScalingGroupBeanOptions
 import com.netflix.asgard.model.AutoScalingGroupData
 import com.netflix.asgard.model.AutoScalingProcessType
 import com.netflix.asgard.model.EurekaStatus
 import com.netflix.asgard.model.InstanceHealth
+import com.netflix.asgard.model.LaunchConfigurationBeanOptions
 import com.netflix.asgard.model.ScalingPolicyData
 import com.netflix.asgard.model.SimpleDbSequenceLocator
 import com.netflix.asgard.model.StackAsg
@@ -96,22 +97,18 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     def awsCloudWatchService
     def awsEc2Service
     def awsLoadBalancerService
-    def awsSimpleDbService
     Caches caches
     def cloudReadyService
     def configService
     def discoveryService
-    def emailerService
+    def idService
     def launchTemplateService
     def mergedInstanceService
     def pushService
     def taskService
-	def restClientRightScaleService
+    def restClientRightScaleService
+    def spotInstanceRequestService
     ThreadScheduler threadScheduler
-
-    /** The location of the sequence number in SimpleDB */
-    final SimpleDbSequenceLocator sequenceLocator = new SimpleDbSequenceLocator(region: Region.defaultRegion(),
-            domainName: 'CLOUD_POLICY_SEQUENCE', itemName: 'policy_id', attributeName: 'value')
 
     final AwsResultsRetriever scalingPolicyRetriever = new AwsResultsRetriever<ScalingPolicy, DescribePoliciesRequest,
             DescribePoliciesResult>() {
@@ -146,7 +143,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     void initializeCaches() {
         // Cluster cache has no timer. It gets triggered by the Auto Scaling Group cache callback closure.
         caches.allClusters.ensureSetUp(
-                { Region region -> buildClusters(region, caches.allAutoScalingGroups.by(region).list()) }, {},
+                { Region region -> buildClusters(region, caches.allAutoScalingGroups.by(region).list()) }, { },
                 { Region region ->
                     boolean awaitingLoadBalancers = caches.allLoadBalancers.by(region).isDoingFirstFill()
                     boolean awaitingAppInstances = caches.allApplicationInstances.by(region).isDoingFirstFill()
@@ -162,7 +159,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         caches.allTerminationPolicyTypes.ensureSetUp({ Region region -> retrieveTerminationPolicyTypes() })
         caches.allScheduledActions.ensureSetUp({ Region region -> retrieveScheduledActions(region) })
         caches.allSignificantStackInstanceHealthChecks.ensureSetUp(
-                { Region region -> retrieveInstanceHealthChecks(region) }, {},
+                { Region region -> retrieveInstanceHealthChecks(region) }, { },
                 { Region region ->
                     caches.allApplicationInstances.by(region).filled && caches.allAutoScalingGroups.by(region).filled
                 }
@@ -508,13 +505,13 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         if (!instanceId) { return null }
         def groups = getAutoScalingGroups(userContext)
         //println "Looking for group for instance " + instanceId
-        groups.find { it.instances.any { it.instanceId == instanceId }}
+        groups.find { it.instances.any { it.instanceId == instanceId } }
     }
 
     List<AutoScalingGroup> getAutoScalingGroupsForLB(UserContext userContext, String lbName) {
         def groups = getAutoScalingGroups(userContext)
         //println "Looking for group for LB " + lbName
-        groups.findAll { it.loadBalancerNames.any { it == lbName }}
+        groups.findAll { it.loadBalancerNames.any { it == lbName } }
     }
 
     AutoScalingGroup getAutoScalingGroupForLaunchConfig(UserContext userContext, String lcName) {
@@ -854,12 +851,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     String nextPolicyId(UserContext userContext) {
-        try {
-            return awsSimpleDbService.incrementAndGetSequenceNumber(userContext, sequenceLocator)
-        } catch (Exception e) {
-            emailerService.sendExceptionEmail(e.toString(), e)
-            return UUID.randomUUID().toString()
-        }
+        idService.nextId(userContext, SimpleDbSequenceLocator.Policy)
     }
 
     /**
@@ -872,24 +864,15 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @param existingTask
      * @return created ASG
      */
-    AutoScalingGroup createAutoScalingGroup(UserContext userContext, AutoScalingGroup groupTemplate,
-            String launchConfigName, Collection<AutoScalingProcessType> suspendedProcesses,
+    AutoScalingGroup createAutoScalingGroup(UserContext userContext, AutoScalingGroupBeanOptions groupTemplate,
             Task existingTask = null) {
         String name = groupTemplate.autoScalingGroupName
 
         taskService.runTask(userContext, "Create Autoscaling Group '${name}'", { Task task ->
-            CreateAutoScalingGroupRequest request = null
-            groupTemplate.with {
-                request = new CreateAutoScalingGroupRequest(autoScalingGroupName: name,
-                        launchConfigurationName: launchConfigName, minSize: minSize, desiredCapacity: desiredCapacity,
-                        maxSize: maxSize, defaultCooldown: defaultCooldown,
-                        terminationPolicies: terminationPolicies,
-                        healthCheckType: healthCheckType,
-                        healthCheckGracePeriod: healthCheckGracePeriod, availabilityZones: availabilityZones,
-                        loadBalancerNames: loadBalancerNames, VPCZoneIdentifier: VPCZoneIdentifier)
-            }
+            Subnets subnets = awsEc2Service.getSubnets(userContext)
+            CreateAutoScalingGroupRequest request = groupTemplate.getCreateAutoScalingGroupRequest(subnets)
             awsClient.by(userContext.region).createAutoScalingGroup(request)
-            suspendedProcesses.each {
+            groupTemplate.suspendedProcesses.each {
                 suspendProcess(userContext, it, name, task)
             }
         }, Link.to(EntityType.autoScaling, name), existingTask)
@@ -976,26 +959,14 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @param maxSize value to update ASG with
      * @return updated ASG
      */
-    AutoScalingGroup resizeAutoScalingGroup(UserContext userContext, String asgName, Integer minSize,
+    AutoScalingGroupBeanOptions resizeAutoScalingGroup(UserContext userContext, String asgName, Integer minSize,
             Integer desiredCapacity, Integer maxSize) {
         Check.notNull(asgName, String)
-
-        AutoScalingGroup group = getAutoScalingGroup(userContext, asgName)
-        if (!group.getVPCZoneIdentifier()) {
-            group.withVPCZoneIdentifier(null)
+        updateAutoScalingGroup(userContext, asgName) { AutoScalingGroupBeanOptions asg ->
+            if (minSize != null) { asg.minSize = minSize }
+            if (maxSize != null) { asg.maxSize = maxSize }
+            if (desiredCapacity != null) { asg.desiredCapacity = desiredCapacity }
         }
-
-        UpdateAutoScalingGroupRequest request = BeanState.ofSourceBean(group).injectState(
-                new UpdateAutoScalingGroupRequest())
-        if (minSize != null) { request.minSize = minSize }
-        if (maxSize != null) { request.maxSize = maxSize }
-        if (desiredCapacity != null) { request.desiredCapacity = desiredCapacity }
-        awsClient.by(userContext.region).updateAutoScalingGroup(request)
-
-        // Refresh auto scaling group and cluster cache
-        group = getAutoScalingGroup(userContext, asgName)
-        getCluster(userContext, asgName)
-        group
     }
 
     /**
@@ -1032,6 +1003,37 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             return 'Waiting for all instances to pass health checks.'
         }
         null
+    }
+
+    /**
+     * Update an existing ASG.
+     *
+     * @param userContext who made the call, why, and in what region
+     * @param asgName name of the ASG
+     * @param transform changes from the old ASG to the updated version
+     * @return the state of the updated ASG
+     */
+    AutoScalingGroupBeanOptions updateAutoScalingGroup(UserContext userContext, String asgName,
+            Closure transform) {
+        AutoScalingGroup originalAsg = getAutoScalingGroup(userContext, asgName)
+        if (!originalAsg) { return null }
+        Subnets subnets = awsEc2Service.getSubnets(userContext)
+        AutoScalingGroupBeanOptions originalAsgOptions = AutoScalingGroupBeanOptions.from(originalAsg, subnets)
+        AutoScalingGroupBeanOptions newAsgOptions = AutoScalingGroupBeanOptions.from(originalAsgOptions)
+        transform(newAsgOptions)
+        newAsgOptions.autoScalingGroupName = asgName
+        SuspendProcessesRequest suspendProcessesRequest = originalAsgOptions.
+                getSuspendProcessesRequestForUpdate(newAsgOptions.suspendedProcesses)
+        if (suspendProcessesRequest) {
+            awsClient.by(userContext.region).suspendProcesses(suspendProcessesRequest)
+        }
+        ResumeProcessesRequest resumeProcessesRequest = originalAsgOptions.
+                getResumeProcessesRequestForUpdate(newAsgOptions.suspendedProcesses)
+        if (resumeProcessesRequest) {
+            awsClient.by(userContext.region).resumeProcesses(resumeProcessesRequest)
+        }
+        awsClient.by(userContext.region).updateAutoScalingGroup(newAsgOptions.getUpdateAutoScalingGroupRequest(subnets))
+        newAsgOptions
     }
 
     AutoScalingGroup updateAutoScalingGroup(UserContext userContext, AutoScalingGroupData autoScalingGroupData,
@@ -1368,7 +1370,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
     Collection<String> getLaunchConfigurationNamesForAutoScalingGroup(UserContext userContext,
                                                                       String autoScalingGroupName) {
-        Set<String> launchConfigNamesForGroup = new HashSet<String>()
+        Set<String> launchConfigNamesForGroup = [] as Set
         String currentLaunchConfigName = getAutoScalingGroup(userContext, autoScalingGroupName).launchConfigurationName
         if (currentLaunchConfigName) {
             launchConfigNamesForGroup.add(currentLaunchConfigName)
@@ -1414,43 +1416,43 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         String groupName = groupTemplate.autoScalingGroupName
         String launchConfigName = Relationships.buildLaunchConfigurationName(groupName)
         String msg = "Create Auto Scaling Group '${groupName}'"
+        Subnets subnets = awsEc2Service.getSubnets(userContext)
 
-        Collection<String> securityGroups = launchTemplateService.includeDefaultSecurityGroups(
-                launchConfigTemplate.securityGroups, groupTemplate.VPCZoneIdentifier, userContext.region)
+        AutoScalingGroupBeanOptions groupOptions = AutoScalingGroupBeanOptions.from(groupTemplate, subnets)
+        groupOptions.launchConfigurationName = launchConfigName
+        groupOptions.suspendedProcesses = suspendedProcesses
+
+        LaunchConfigurationBeanOptions launchConfig = LaunchConfigurationBeanOptions.from(launchConfigTemplate)
+        launchConfig.launchConfigurationName = launchConfigName
+        launchConfig.securityGroups = launchTemplateService.includeDefaultSecurityGroups(
+                launchConfigTemplate.securityGroups, groupTemplate.VPCZoneIdentifier as boolean, userContext.region)
         taskService.runTask(userContext, msg, { Task task ->
-            AutoScalingGroup groupForUserData = new AutoScalingGroup().
-                    withAutoScalingGroupName(groupTemplate.autoScalingGroupName).
-                    withLaunchConfigurationName(launchConfigName)
-            String userData = launchTemplateService.buildUserData(userContext, groupForUserData.autoScalingGroupName,
-                    groupForUserData.launchConfigurationName)
+            String userData = launchTemplateService.buildUserData(userContext, groupOptions, launchConfig)
+            launchConfig.userData = userData
             result.launchConfigName = launchConfigName
             result.autoScalingGroupName = groupName
 
-			if (userContext.region.code == Region.SL_US_REGION_CODE) {
-				result.launchConfigCreated = true // liar liar pants on fire, but not needed until we support multiple instance types	
-			}
-			else {
-	            try {
-	                createLaunchConfiguration(userContext, launchConfigName, launchConfigTemplate.imageId,
-	                        launchConfigTemplate.keyName, securityGroups, userData,
-	                        launchConfigTemplate.instanceType, launchConfigTemplate.kernelId,
-	                        launchConfigTemplate.ramdiskId, launchConfigTemplate.iamInstanceProfile,
-	                        launchConfigTemplate.spotPrice, launchConfigTemplate.ebsOptimized, task)
-	                result.launchConfigCreated = true
-	            } catch (AmazonServiceException launchConfigCreateException) {
-	                result.launchConfigCreateException = launchConfigCreateException
-	            }
-			}
-
+        if (userContext.region.code == Region.SL_US_REGION_CODE) {
+            result.launchConfigCreated = true // liar liar pants on fire, but not needed until we support multiple instance types	
+        }
+        else {
             try {
-				if (userContext.region.code == Region.SL_US_REGION_CODE) {
-					createAutoScalingGroupRightScale(userContext, groupTemplate, launchConfigTemplate, suspendedProcesses, task)
-				}
-				else {
-					createAutoScalingGroup(userContext, groupTemplate, launchConfigName, suspendedProcesses, task)
-				}
-                result.autoScalingGroupCreated = true
-            } catch (AmazonServiceException autoScalingCreateException) {
+                createLaunchConfiguration(userContext, launchConfig, task)
+                result.launchConfigCreated = true
+            } catch (AmazonServiceException launchConfigCreateException) {
+                result.launchConfigCreateException = launchConfigCreateException
+            }
+        }
+
+        try {
+            if (userContext.region.code == Region.SL_US_REGION_CODE) {
+                createAutoScalingGroupRightScale(userContext, groupTemplate, launchConfigTemplate, suspendedProcesses, task)
+            }
+            else {
+                createAutoScalingGroup(userContext, groupOptions, task)
+            }
+            result.autoScalingGroupCreated = true
+        } catch (AmazonServiceException autoScalingCreateException) {
                 result.autoScalingCreateException = autoScalingCreateException
                 try {
                     deleteLaunchConfiguration(userContext, launchConfigName, task)
@@ -1477,27 +1479,19 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      *
      * @param userContext who made the call, why, and in what region
      * @param launchConfiguration to create
+     * @param existingTask to contain work, if any
      */
-    void createLaunchConfiguration(UserContext userContext, LaunchConfiguration launchConfiguration) {
-        createLaunchConfiguration(userContext, launchConfiguration.launchConfigurationName,
-                launchConfiguration.imageId, launchConfiguration.keyName, launchConfiguration.securityGroups,
-                launchConfiguration.userData, launchConfiguration.instanceType, launchConfiguration.kernelId,
-                launchConfiguration.ramdiskId, launchConfiguration.iamInstanceProfile,
-                launchConfiguration.spotPrice, launchConfiguration.ebsOptimized, new Task())
-    }
-
-    void createLaunchConfiguration(UserContext userContext, String name, String imageId, String keyName,
-            Collection<String> securityGroups, String userData, String instanceType, String kernelId, String ramdiskId,
-            String iamInstanceProfile, String spotPrice,
-            boolean ebsOptimized = false, Task existingTask = null) {
+    void createLaunchConfiguration(UserContext userContext, LaunchConfigurationBeanOptions launchConfiguration,
+            Task existingTask = null) {
+        String name = launchConfiguration.launchConfigurationName
+        String imageId = launchConfiguration.imageId
+        Check.notNull(name, LaunchConfiguration, "name")
+        Check.notNull(imageId, LaunchConfiguration, "imageId")
+        Check.notNull(launchConfiguration.keyName, LaunchConfiguration, "keyName")
+        Check.notNull(launchConfiguration.instanceType, LaunchConfiguration, "instanceType")
         taskService.runTask(userContext, "Create Launch Configuration '${name}' with image '${imageId}'", { Task task ->
-            Check.notNull(name, LaunchConfiguration, "name")
-            Check.notNull(imageId, LaunchConfiguration, "imageId")
-            Check.notNull(keyName, LaunchConfiguration, "keyName")
-            Check.notNull(instanceType, LaunchConfiguration, "instanceType")
-            String encodedUserData = Ensure.encoded(userData)
             List<BlockDeviceMapping> blockDeviceMappings = []
-            if (configService.instanceTypeNeedsEbsVolumes(instanceType)) {
+            if (configService.instanceTypeNeedsEbsVolumes(launchConfiguration.instanceType)) {
                 List<String> deviceNames = configService.ebsVolumeDeviceNamesForLaunchConfigs
                 for (deviceName in deviceNames) {
                     blockDeviceMappings << new BlockDeviceMapping(
@@ -1505,18 +1499,9 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
                             ebs: new Ebs(volumeSize: configService.sizeOfEbsVolumesAddedToLaunchConfigs))
                 }
             }
-            def request = new CreateLaunchConfigurationRequest()
-                    .withLaunchConfigurationName(name)
-                    .withImageId(imageId).withKeyName(keyName).withSecurityGroups(securityGroups)
-                    .withUserData(encodedUserData).withInstanceType(instanceType)
-                    .withBlockDeviceMappings(blockDeviceMappings)
-                    .withIamInstanceProfile(iamInstanceProfile)
-                    .withSpotPrice(spotPrice)
-                    .withEbsOptimized(ebsOptimized)
-            // Be careful not to set empties back into these fields--null is OK
-            if (kernelId != '') { request.setKernelId(kernelId) }
-            if (ramdiskId != '') { request.setRamdiskId(ramdiskId) }
-            awsClient.by(userContext.region).createLaunchConfiguration(request)
+            launchConfiguration.blockDeviceMappings = blockDeviceMappings
+            awsClient.by(userContext.region).createLaunchConfiguration(launchConfiguration.
+                    getCreateLaunchConfigurationRequest(userContext, spotInstanceRequestService))
             pushService.addAccountsForImage(userContext, imageId, task)
 
         }, Link.to(EntityType.launchConfiguration, name), existingTask)

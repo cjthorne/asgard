@@ -17,31 +17,32 @@ package com.netflix.asgard.deployment
 
 import com.amazonaws.services.autoscaling.model.AutoScalingGroup
 import com.amazonaws.services.autoscaling.model.Instance
-import com.amazonaws.services.autoscaling.model.LaunchConfiguration
 import com.amazonaws.services.autoscaling.model.ScheduledUpdateGroupAction
 import com.amazonaws.services.simpleworkflow.model.WorkflowExecution
-import com.google.common.collect.Sets
 import com.netflix.asgard.AwsAutoScalingService
 import com.netflix.asgard.AwsEc2Service
 import com.netflix.asgard.AwsLoadBalancerService
+import com.netflix.asgard.AwsSimpleWorkflowService
 import com.netflix.asgard.ConfigService
 import com.netflix.asgard.DiscoveryService
 import com.netflix.asgard.EmailerService
 import com.netflix.asgard.LaunchTemplateService
 import com.netflix.asgard.Region
 import com.netflix.asgard.UserContext
-import com.netflix.asgard.flow.Activity
+import com.netflix.asgard.model.AutoScalingGroupBeanOptions
 import com.netflix.asgard.model.AutoScalingGroupData
-import com.netflix.asgard.model.AutoScalingGroupMixin
 import com.netflix.asgard.model.AutoScalingProcessType
-import com.netflix.asgard.model.InstancePriceType
+import com.netflix.asgard.model.LaunchConfigurationBeanOptions
 import com.netflix.asgard.model.ScalingPolicyData
-import com.netflix.asgard.model.Subnets
+import com.netflix.asgard.model.SwfWorkflowTags
+import com.netflix.asgard.model.WorkflowExecutionBeanOptions
 import com.netflix.asgard.push.Cluster
 import com.netflix.asgard.push.PushException
+import com.netflix.glisten.ActivityOperations
 import org.codehaus.groovy.grails.web.mapping.LinkGenerator
 import spock.lang.Specification
 
+@SuppressWarnings("GroovyAssignabilityCheck")
 class DeploymentActivitiesSpec extends Specification {
 
     UserContext userContext = UserContext.auto(Region.US_WEST_1)
@@ -52,89 +53,101 @@ class DeploymentActivitiesSpec extends Specification {
     DiscoveryService mockDiscoveryService = Mock(DiscoveryService)
     AwsLoadBalancerService mockAwsLoadBalancerService = Mock(AwsLoadBalancerService)
     EmailerService mockEmailerService = Mock(EmailerService)
-    Activity mockActivity = Mock(Activity)
+    ActivityOperations mockActivityOperations = Mock(ActivityOperations)
     LinkGenerator mockLinkGenerator = Mock(LinkGenerator)
+    AwsSimpleWorkflowService mockAwsSimpleWorkflowService = Mock(AwsSimpleWorkflowService)
     DeploymentActivities deploymentActivities = new DeploymentActivitiesImpl(
             awsAutoScalingService: mockAwsAutoScalingService, awsEc2Service: mockAwsEc2Service,
             launchTemplateService: mockLaunchTemplateService, configService: mockConfigService,
             discoveryService: mockDiscoveryService, awsLoadBalancerService: mockAwsLoadBalancerService,
-            emailerService: mockEmailerService, activity: mockActivity, grailsLinkGenerator: mockLinkGenerator)
+            emailerService: mockEmailerService, activity: mockActivityOperations,
+            grailsLinkGenerator: mockLinkGenerator, awsSimpleWorkflowService: mockAwsSimpleWorkflowService)
 
     AsgDeploymentNames asgDeploymentNames = new AsgDeploymentNames(
             previousAsgName: 'rearden_metal_pourer-v001',
             previousLaunchConfigName: 'rearden_metal_pourer-20130718090003',
-            previousVpcZoneIdentifier: 'oldVpcZoneIdentifier',
             nextAsgName: 'rearden_metal_pourer-v002',
-            nextLaunchConfigName: 'rearden_metal_pourer-20130718090004',
-            nextVpcZoneIdentifier: 'newVpcZoneIdentifier'
+            nextLaunchConfigName: 'rearden_metal_pourer-20130718090004'
     )
 
     def 'should get ASG deployment names'() {
         when:
         AsgDeploymentNames asgDeploymentNames = deploymentActivities.getAsgDeploymentNames(userContext,
-                'rearden_metal_pourer', null, ['us_west-1a'])
+                'rearden_metal_pourer')
 
         then:
         asgDeploymentNames.previousAsgName == 'rearden_metal_pourer-v001'
         asgDeploymentNames.previousLaunchConfigName == 'rearden_metal_pourer-20130718090003'
-        asgDeploymentNames.previousVpcZoneIdentifier == 'oldVpcZoneIdentifier'
         asgDeploymentNames.nextAsgName == 'rearden_metal_pourer-v002'
         asgDeploymentNames.nextLaunchConfigName.startsWith('rearden_metal_pourer-')
-        asgDeploymentNames.nextVpcZoneIdentifier == null
 
         1 * mockAwsAutoScalingService.getCluster(_, 'rearden_metal_pourer') >> new Cluster([
                 new AutoScalingGroupData('rearden_metal_pourer-v001', null, null, null, [], null, null, [], [],
                         null, null, [], null, [], 'rearden_metal_pourer-20130718090003', [], [:], [], [:],
                         [], 'oldVpcZoneIdentifier')
         ])
-        1 * mockAwsEc2Service.getSubnets(_) >> Subnets.from([])
         0 * _
+    }
+
+    def 'should construct launch config for next ASG'() {
+        LaunchConfigurationBeanOptions inputs = new LaunchConfigurationBeanOptions(instanceType: 'instanceType2')
+
+        when:
+        def actualLaunchConfig = deploymentActivities.constructLaunchConfigForNextAsg(userContext,
+                new AutoScalingGroupBeanOptions(launchConfigurationName: 'rearden_metal_pourer-20130718090004'),
+                inputs)
+
+        then:
+        actualLaunchConfig == new LaunchConfigurationBeanOptions(instanceType: 'instanceType2',
+                securityGroups: ['defaultSecurityGroup'], iamInstanceProfile: 'defaultIamRole',
+                launchConfigurationName: 'rearden_metal_pourer-20130718090004')
+        1 * mockConfigService.getDefaultIamRole() >> 'defaultIamRole'
+        1 * mockLaunchTemplateService.includeDefaultSecurityGroups(_, false, _) >> ['defaultSecurityGroup']
     }
 
     def 'should create launch config for next ASG'() {
         when:
-        deploymentActivities.createLaunchConfigForNextAsg(userContext, asgDeploymentNames,
-                new LaunchConfigurationOptions(keyName: 'keyName1', instanceType: 'instanceType2'),
-                InstancePriceType.ON_DEMAND)
+        deploymentActivities.createLaunchConfigForNextAsg(userContext, null,
+                new LaunchConfigurationBeanOptions(launchConfigurationName: 'rearden_metal_pourer-20130718090004'))
 
         then:
         with(mockAwsAutoScalingService) {
-            1 * getLaunchConfiguration(_, 'rearden_metal_pourer-20130718090003') >>
-                    new LaunchConfiguration(
-                            instanceType: 'instanceType1',
-                            iamInstanceProfile: 'Steel Producer'
-                    )
-            1 * createLaunchConfiguration(_, new LaunchConfiguration(
-                    launchConfigurationName: 'rearden_metal_pourer-20130718090004',
-                    iamInstanceProfile: 'Steel Producer',
-                    keyName: 'keyName1',
-                    instanceType: 'instanceType2',
-            ))
+            1 * createLaunchConfiguration(_, new LaunchConfigurationBeanOptions(
+                    launchConfigurationName: 'rearden_metal_pourer-20130718090004'
+            ), _)
         }
     }
 
-    def 'should create next ASG'() {
-        AutoScalingGroup.mixin AutoScalingGroupMixin
+    def 'should construct next ASG'() {
+        AutoScalingGroupBeanOptions expectedAsg = new AutoScalingGroupBeanOptions(minSize: 0, maxSize: 6,
+                desiredCapacity: 0, defaultCooldown: 200, healthCheckGracePeriod: 60,
+                autoScalingGroupName: 'rearden_metal_pourer-v002',
+                launchConfigurationName: 'rearden_metal_pourer-20130718090004',
+                suspendedProcesses: [AutoScalingProcessType.AlarmNotifications] as Set)
 
+        expect:
+        deploymentActivities.constructNextAsgForCluster(userContext, asgDeploymentNames,
+                new AutoScalingGroupBeanOptions(minSize: 4, maxSize: 6, defaultCooldown: 200,
+                        healthCheckGracePeriod: 60, suspendedProcesses: [AutoScalingProcessType.AlarmNotifications])
+        ) == expectedAsg
+    }
+
+    def 'should create next ASG'() {
         when:
-        deploymentActivities.createNextAsgForCluster(userContext, asgDeploymentNames,
-                new AutoScalingGroupOptions(minSize: 4, maxSize: 6, defaultCooldown: 200, healthCheckGracePeriod: 60),
-                true, true)
+        deploymentActivities.createNextAsgForCluster(userContext, new AutoScalingGroupBeanOptions(
+                autoScalingGroupName: 'rearden_metal_pourer-v002',
+                launchConfigurationName: 'rearden_metal_pourer-20130718090004',
+                minSize: 4, desiredCapacity: 5, maxSize: 6, defaultCooldown: 200, healthCheckGracePeriod: 60,
+                suspendedProcesses: [AutoScalingProcessType.Launch]))
 
         then:
         with(mockAwsAutoScalingService) {
-            1 * getAutoScalingGroup(_, 'rearden_metal_pourer-v001') >> new AutoScalingGroup(
-                            launchConfigurationName: 'rearden_metal_pourer-20130718090003',
-                            minSize: 3, desiredCapacity: 5, maxSize: 6, defaultCooldown: 100
-                    )
-            1 * createAutoScalingGroup(_, new AutoScalingGroup(
+            1 * createAutoScalingGroup(_, new AutoScalingGroupBeanOptions(
                     autoScalingGroupName: 'rearden_metal_pourer-v002',
-                    launchConfigurationName: 'rearden_metal_pourer-20130718090003',
-                    minSize: 0, desiredCapacity: 0, maxSize: 6, defaultCooldown: 200, healthCheckGracePeriod: 60,
-                    vPCZoneIdentifier: 'newVpcZoneIdentifier'
-            ), 'rearden_metal_pourer-20130718090004',
-                    Sets.newHashSet([AutoScalingProcessType.AZRebalance, AutoScalingProcessType.AddToLoadBalancer]),
-                    _) >> new AutoScalingGroup(autoScalingGroupName: 'rearden_metal_pourer-v002')
+                    launchConfigurationName: 'rearden_metal_pourer-20130718090004',
+                    minSize: 4, desiredCapacity: 5, maxSize: 6, defaultCooldown: 200, healthCheckGracePeriod: 60,
+                    suspendedProcesses: [AutoScalingProcessType.Launch]
+            ), _) >> new AutoScalingGroup(autoScalingGroupName: 'rearden_metal_pourer-v002')
         }
     }
 
@@ -274,7 +287,7 @@ class DeploymentActivitiesSpec extends Specification {
                 'It has finished pouring.', null)
 
         then:
-        with(mockActivity) {
+        with(mockActivityOperations) {
             getWorkflowExecution() >> new WorkflowExecution(runId: '123', workflowId: 'abc')
             getTaskToken() >> '8badf00d'
         }
@@ -293,6 +306,15 @@ class DeploymentActivitiesSpec extends Specification {
                     <link>
                     '''.stripIndent())
         }
+        with(mockConfigService) {
+            1 * getLinkCanonicalServerUrl() >> 'http://asgard'
+        }
+        with(mockAwsSimpleWorkflowService) {
+            1 * getWorkflowExecutionInfoByWorkflowExecution(new WorkflowExecution(runId: '123', workflowId: 'abc')) >>
+                    Mock(WorkflowExecutionBeanOptions) {
+                getTags() >> new SwfWorkflowTags(id: 1)
+            }
+        }
         0 * _
     }
 
@@ -302,7 +324,7 @@ class DeploymentActivitiesSpec extends Specification {
                 'Read this Hank!', 'Production has halted.')
 
         then:
-        with(mockActivity) {
+        with(mockActivityOperations) {
             getWorkflowExecution() >> new WorkflowExecution(runId: '123', workflowId: 'abc')
             getTaskToken() >> '8badf00d'
         }
@@ -317,6 +339,9 @@ class DeploymentActivitiesSpec extends Specification {
 
                     <link>
                     '''.stripIndent())
+        }
+        with(mockConfigService) {
+            1 * getLinkCanonicalServerUrl() >> 'http://asgard'
         }
         0 * _
     }

@@ -82,15 +82,15 @@ class AutoScalingControllerSpec extends Specification {
         final attrs = controller.show()
 
         then:
-        1 * mockAwsAutoScalingService.getScalingPoliciesForGroup(_, 'helloworld-example-v015') >> {[
+        1 * mockAwsAutoScalingService.getScalingPoliciesForGroup(_, 'helloworld-example-v015') >> { [
             new ScalingPolicy(alarms: [new Alarm(alarmName: 'alarm1')]),
             new ScalingPolicy(alarms: [new Alarm(alarmName: 'alarm2'), new Alarm(alarmName: 'alarm3')]),
-        ]}
-        1 * mockAwsCloudWatchService.getAlarms(_, ['alarm1', 'alarm2', 'alarm3']) >> {[
+        ] }
+        1 * mockAwsCloudWatchService.getAlarms(_, ['alarm1', 'alarm2', 'alarm3']) >> { [
             new MetricAlarm(alarmName: 'alarm1', metricName: 'metric1'),
             new MetricAlarm(alarmName: 'alarm2', metricName: 'metric2'),
             new MetricAlarm(alarmName: 'alarm3', metricName: 'metric3'),
-        ]}
+        ] }
         attrs['alarmsByName'] == [
                 alarm1: new MetricAlarm(alarmName: 'alarm1', metricName: 'metric1'),
                 alarm2: new MetricAlarm(alarmName: 'alarm2', metricName: 'metric2'),
@@ -229,9 +229,9 @@ class AutoScalingControllerSpec extends Specification {
         assert securityGroupNames.containsAll(['akms', 'helloworld', 'helloworld-frontend', 'helloworld-asgardtest',
                 'helloworld-tmp', 'ntsuiboot'])
         [
-                'm3.xlarge', 'm3.2xlarge','t1.micro', 'm1.small', 'm1.medium', 'c1.medium', 'm1.large', 'm2.xlarge',
+                't1.micro', 'm1.small', 'm1.medium', 'c1.medium', 'm1.large', 'm2.xlarge',
                 'm1.xlarge', 'c1.xlarge', 'm2.2xlarge', 'cc1.4xlarge', 'm2.4xlarge', 'cg1.4xlarge', 'cc2.8xlarge',
-                'hi1.4xlarge', 'huge.mainframe'
+                'hi1.4xlarge', 'huge.mainframe', 'm3.2xlarge', 'm3.xlarge'
         ] == attrs['instanceTypes']*.name
     }
 

@@ -131,7 +131,7 @@ class CachedMap<T> implements Fillable {
      * @param readinessChecker an optional closure to determine whether or not external state is ready for this
      *          regional cached map to run its own fill algorithm
      */
-    void ensureSetUp(Closure retriever, Closure callback = {}, Closure readinessChecker = { true }) {
+    void ensureSetUp(Closure retriever, Closure callback = { }, Closure readinessChecker = { true }) {
         if (needsInitialization) {
             this.retriever = retriever
             this.callback = callback
@@ -143,18 +143,19 @@ class CachedMap<T> implements Fillable {
         needsInitialization = false
     }
 
+    private Closure fillCacheAndPerformCallback = {
+        try {
+            fill()
+            callback?.call()
+        } catch (Exception e) {
+            // For some reason StackTraceUtils does not print anything successfully.
+            log.error "Exception filling cache ${name}", e
+        }
+    }
+
     private void start(int intervalSeconds) {
-        CachedMap<T> thisMap = this
         int maxJitterSeconds = Math.min(intervalSeconds, 120) / 6
-        threadScheduler.schedule(intervalSeconds, maxJitterSeconds, {
-            try {
-                thisMap.fill()
-                callback?.call()
-            } catch (Exception e) {
-                // For some reason StackTraceUtils does not print anything successfully.
-                log.error "Exception filling cache ${name}", e
-            }
-        })
+        threadScheduler.scheduleAtFixedRate(intervalSeconds, maxJitterSeconds, fillCacheAndPerformCallback)
     }
 
     /**
@@ -168,6 +169,8 @@ class CachedMap<T> implements Fillable {
         // Do not fill this cache yet if the system is not yet ready to execute this cache's fill algorithm.
         // For example, if other caches need to be filled first then do not yet fill this cache.
         if (doingFirstFill && !readinessChecker()) {
+            // Not ready yet, so try again very soon.
+            threadScheduler.schedule(1, fillCacheAndPerformCallback)
             return
         }
         // Try to obtain the fill lock for this cached map. If another thread is already holding the lock, then let that
@@ -188,7 +191,7 @@ class CachedMap<T> implements Fillable {
         try {
             DateTime dataPullStartTime = new DateTime()
             Set<String> cachedKeys = new HashSet<String>(map.keySet())
-            Map<String, T> datasource = new HashMap<String, T>()
+            Map<String, T> datasource = [:]
             Collection<T> items = retriever()
             items.each { val -> datasource.put(entityType.key(val), val) }
 

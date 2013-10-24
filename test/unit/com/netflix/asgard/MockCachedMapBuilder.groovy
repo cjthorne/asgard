@@ -16,6 +16,7 @@
 package com.netflix.asgard
 
 import com.google.common.collect.ImmutableMap
+
 /**
  * This class makes it easier to mock Caches for testing. You are responsible for initializing the CachedMaps, and the
  * setup enforced by the application is sidestepped. Usage is the same as CachedMapBuilder.
@@ -24,20 +25,24 @@ import com.google.common.collect.ImmutableMap
  */
 class MockCachedMapBuilder<T> extends CachedMapBuilder<T> {
     final ImmutableMap<EntityType, CachedMap> entityTypeToCacheMap
-    final EntityType  entityType
+    final EntityType entityType
+    final Closure<CachedMap> cachedMapFactory
 
     /**
      * Used to create a CachedMapBuilder where you have control over the initialization of the CachedMaps.
      *
      * @param entityTypeToCacheMap is a map of fully initialized or mocked CachedMaps keyed by entityType
+     * @param cachedMapFactory a way to create CachedMaps that aren't specified in entityTypeToCacheMap
      */
-    MockCachedMapBuilder(Map<EntityType, CachedMap> entityTypeToCacheMap) {
-        this(entityTypeToCacheMap, null)
+    MockCachedMapBuilder(Map<EntityType, CachedMap> entityTypeToCacheMap, Closure<CachedMap> cachedMapFactory = null) {
+        this(cachedMapFactory, entityTypeToCacheMap, null)
     }
 
     // This constructor is private to indicate that it is not part of the public API.
-    private MockCachedMapBuilder(Map<EntityType, CachedMap> entityTypeToCacheMap, EntityType  entityType) {
+    private MockCachedMapBuilder(Closure<CachedMap> cachedMapFactory, Map<EntityType, CachedMap> entityTypeToCacheMap,
+            EntityType entityType) {
         super(null)
+        this.cachedMapFactory = cachedMapFactory
         this.entityTypeToCacheMap = ImmutableMap.copyOf(entityTypeToCacheMap)
         this.entityType = entityType
     }
@@ -47,13 +52,13 @@ class MockCachedMapBuilder<T> extends CachedMapBuilder<T> {
     }
 
     protected <S> CachedMapBuilder<S> of(EntityType<S> entityType) {
-        new MockCachedMapBuilder(entityTypeToCacheMap, entityType)
+        new MockCachedMapBuilder(cachedMapFactory, entityTypeToCacheMap, entityType)
     }
 
     protected CachedMap<T> buildCachedMap(Region region = null) {
         CachedMap cachedMap = entityTypeToCacheMap.get(entityType)
         if (!cachedMap) {
-            cachedMap = new CachedMap(region, entityType, null, null)
+            cachedMap = cachedMapFactory ? cachedMapFactory(region) : new CachedMap(region, entityType, null, null)
         }
         cachedMap
     }
@@ -70,7 +75,7 @@ class MockCachedMapBuilder<T> extends CachedMapBuilder<T> {
             this.cachedMap = cachedMap
         }
 
-        void ensureSetUp(Closure multiRegionRetriever, Closure multiRegionCallback = {},
+        void ensureSetUp(Closure multiRegionRetriever, Closure multiRegionCallback = { },
                          Closure multiRegionReadinessChecker = { true }) {
             Region region = Region.US_EAST_1
             cachedMap.ensureSetUp({ multiRegionRetriever(region) }, { multiRegionCallback(region) },

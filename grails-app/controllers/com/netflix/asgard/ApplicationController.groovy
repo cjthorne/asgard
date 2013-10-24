@@ -36,9 +36,9 @@ class ApplicationController {
     def configService
     def discoveryService
 
-    def static allowedMethods = [save: 'POST', update: 'POST', delete: 'POST', securityUpdate: 'POST']
+    static allowedMethods = [save: 'POST', update: 'POST', delete: 'POST', securityUpdate: 'POST']
 
-    def static editActions = ['security']
+    static editActions = ['security']
 
     def index = { redirect(action: 'list', params: params) }
 
@@ -93,7 +93,7 @@ class ApplicationController {
 
         // Sort by number of instances descending, then by number of auto scaling groups descending
         List<Owner> owners = (ownerNamesToOwners.values() as List).
-                sort { -1 * it.autoScalingGroupCount}.sort { -1 * it.instanceCount }
+                sort { -1 * it.autoScalingGroupCount }.sort { -1 * it.instanceCount }
 
         withFormat {
             html { [owners: owners] }
@@ -170,6 +170,7 @@ class ApplicationController {
         } else {
             String name = params.name
             UserContext userContext = UserContext.of(request)
+            String group = params.group
             String type = params.type
             String desc = params.description
             String owner = params.owner
@@ -177,8 +178,8 @@ class ApplicationController {
             String monitorBucketTypeString = params.monitorBucketType
             boolean enableChaosMonkey = params.chaosMonkey == 'enabled'
             MonitorBucketType bucketType = Enum.valueOf(MonitorBucketType, monitorBucketTypeString)
-            CreateApplicationResult result = applicationService.createRegisteredApplication(userContext, name, type,
-                    desc, owner, email, bucketType, enableChaosMonkey)
+            CreateApplicationResult result = applicationService.createRegisteredApplication(userContext, name, group,
+                    type, desc, owner, email, bucketType, enableChaosMonkey)
             flash.message = result.toString()
             if (result.succeeded()) {
                 redirect(action: 'show', params: [id: name])
@@ -199,6 +200,7 @@ class ApplicationController {
     def update = {
         String name = params.name
         UserContext userContext = UserContext.of(request)
+        String group = params.group
         String type = params.type
         String desc = params.description
         String owner = params.owner
@@ -206,7 +208,7 @@ class ApplicationController {
         String monitorBucketTypeString = params.monitorBucketType
         try {
             MonitorBucketType bucketType = Enum.valueOf(MonitorBucketType, monitorBucketTypeString)
-            applicationService.updateRegisteredApplication(userContext, name, type, desc, owner, email,
+            applicationService.updateRegisteredApplication(userContext, name, group, type, desc, owner, email,
                     bucketType)
             flash.message = "Application '${name}' has been updated."
         } catch (Exception e) {
@@ -268,10 +270,12 @@ class ApplicationController {
 
     // Security Group permission updating logic
 
-    private void updateSecurityEgress(UserContext userContext, SecurityGroup srcGroup, List<String> selectedGroups, Map portMap) {
-        awsEc2Service.getSecurityGroups(userContext).each {SecurityGroup targetGroup ->
-            boolean wantAccess = selectedGroups.any {it == targetGroup.groupName} && portMap[targetGroup.groupName] != ''
-            String  wantPorts = wantAccess ? portMap[targetGroup.groupName] : null
+    private void updateSecurityEgress(UserContext userContext, SecurityGroup srcGroup, List<String> selectedGroups,
+                                      Map portMap) {
+        awsEc2Service.getSecurityGroups(userContext).each { SecurityGroup targetGroup ->
+            boolean wantAccess = selectedGroups.any { it == targetGroup.groupName } &&
+                    portMap[targetGroup.groupName] != ''
+            String wantPorts = wantAccess ? portMap[targetGroup.groupName] : null
             List<IpPermission> wantPerms = awsEc2Service.permissionsFromString(wantPorts)
             awsEc2Service.updateSecurityGroupPermissions(userContext, targetGroup, srcGroup, wantPerms)
         }

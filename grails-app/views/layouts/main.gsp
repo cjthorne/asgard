@@ -62,7 +62,6 @@
         <input type="text" name="ticket" placeholder="${ticketLabel}" id="ticketNumber" title="${fullTicketLabel} number" class="${ticketRequired ? 'required' : 'optional'}"/>
       </div>
       <g:if test="${authenticationEnabled}">
-        <g:set var='targetUri' value="${request.requestURL + (request.queryString ? '?' + request.queryString : '')}"/>
         <shiro:isLoggedIn>
           <div class="authentication">
             Logged in as <shiro:principal/>
@@ -95,9 +94,7 @@
          <li class="menuButton"><g:link class="stacks" controller="stack" action="list">Stacks</g:link></li>
          <li class="menuButton"><g:link class="users" controller="application" action="owner">Owners</g:link></li>
          <li class="menuButton"><g:link class="securityGroups" controller="security" action="list">Security Groups</g:link></li>
-         <g:if test="${platformserviceExists}">
-           <li class="menuButton"><g:link class="fastProperties" controller="fastProperty" action="apps">Fast Properties</g:link></li>
-         </g:if>
+         <g:extLinkToPropertiesConsole />
        </ul>
      </li>
      <li class="menuButton"><g:link class="images" controller="image" action="list">AMI</g:link></li>
@@ -142,6 +139,9 @@
    </ul>
   </g:if>
   <div class="clear"></div>
+  <g:if test="${bleskDataUrl}">
+    <div id="blesk" data-appid="asgard" data-server="${bleskDataUrl}" data-context-env="${env}" data-context-region="${region.code}"></div>
+  </g:if>
   <g:layoutBody/>
   <script type="text/javascript">
     window.browserGlobalsFromServer = {
@@ -154,6 +154,9 @@
   <script type="text/javascript" src="${resource(dir: 'js', file: 'jquery.js')}?v=${build}"></script>
   <script defer type="text/javascript" src="${resource(dir: 'js/select2-3.2', file: 'select2.min.js')}?v=${build}"></script>
   <script defer type="text/javascript" src="${resource(dir: 'js', file: 'custom.js')}?v=${build}"></script>
+  <g:if test="${bleskJavaScriptUrl}">
+    <script defer type="text/javascript" src="${bleskJavaScriptUrl}?v=${build}"></script>
+  </g:if>
   <g:render template="/layouts/occasion"/>
 </body>
 </html>

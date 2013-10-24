@@ -47,6 +47,48 @@ class ConfigService {
     }
 
     /**
+     * @return true if emails are enabled for sending system errors to Asgard admins, false otherwise
+     */
+    boolean isSystemEmailEnabled() {
+        grailsApplication.config.email.systemEnabled
+    }
+
+    /**
+     * @return true if emails are enabled for sending notifications to app owners about cloud changes, false otherwise
+     */
+    boolean isUserEmailEnabled() {
+        grailsApplication.config.email.userEnabled
+    }
+
+    /**
+     * @return the Simple Mail Transport Protocol (SMTP) host that should be used for sending emails
+     */
+    String getSmtpHost() {
+        grailsApplication.config.email.smtpHost ?: null
+    }
+
+    /**
+     * @return the "from" address for sending user emails
+     */
+    String getFromAddressForEmail() {
+        grailsApplication.config.email.fromAddress ?: null
+    }
+
+    /**
+     * @return the email address that should receive system-level error email alerts
+     */
+    String getSystemEmailAddress() {
+        grailsApplication.config.email.systemEmailAddress ?: null
+    }
+
+    /**
+     * @return the common beginning of all system error email subjects
+     */
+    String getErrorEmailSubjectStart() {
+        grailsApplication.config.email.errorSubjectStart ?: null
+    }
+
+    /**
      * Gets the Amazon Web Services account number for the current environment. This must be the first account number
      * string in the awsAccounts list in Config.groovy.
      *
@@ -372,8 +414,19 @@ class ConfigService {
         grailsApplication.config.cloud?.applicationsDomain ?: 'CLOUD_APPLICATIONS'
     }
 
+    /**
+     * @return the first part of all the environment variable names to be inserted into user data
+     */
     String getUserDataVarPrefix() {
         grailsApplication.config.cloud?.userDataVarPrefix ?: 'CLOUD_'
+    }
+
+    /**
+     * @return the base server URL for generating links to the current Asgard instance in outgoing emails
+     */
+    String getLinkCanonicalServerUrl() {
+        grailsApplication.config.link?.canonicalServerUrl ?: grailsApplication.config.grails.serverURL ?:
+                'http://localhost:8080'
     }
 
     /**
@@ -470,6 +523,20 @@ class ConfigService {
      */
     String getPlatformServicePort() {
         grailsApplication.config.platform?.port ?: '80'
+    }
+
+    /**
+     * @return the URL of the JavaScript file to import when integrating with the Blesk notification system
+     */
+    String getBleskJavaScriptUrl() {
+        grailsApplication.config.blesk?.javaScriptUrl ?: null
+    }
+
+    /**
+     * @return the URL from which Blesk should pull notification data
+     */
+    String getBleskDataUrl() {
+        grailsApplication.config.blesk?.dataUrl ?: null
     }
 
     /**
@@ -682,5 +749,12 @@ class ConfigService {
      */
     List<String> getEbsVolumeDeviceNamesForLaunchConfigs() {
         grailsApplication.config.cloud?.launchConfig?.ebsVolumes?.deviceNames ?: ['/dev/sdb', '/dev/sdc']
+    }
+
+    /**
+     * @return fast property console url based on accountName
+     */
+    String getFastPropertiesConsoleUrl() {
+        grailsApplication.config.platform?.fastPropertyConsoleUrls?."${accountName}" ?: ""
     }
 }

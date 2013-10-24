@@ -1,31 +1,39 @@
+/*
+ * Copyright 2013 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.netflix.asgard
 
 import com.amazonaws.services.simpleworkflow.AmazonSimpleWorkflow
 import com.amazonaws.services.simpleworkflow.flow.ActivityWorker
-import com.amazonaws.services.simpleworkflow.flow.DataConverter
 import com.amazonaws.services.simpleworkflow.flow.ManualActivityCompletionClient
-import com.amazonaws.services.simpleworkflow.flow.ManualActivityCompletionClientFactory
-import com.amazonaws.services.simpleworkflow.flow.ManualActivityCompletionClientFactoryImpl
-import com.amazonaws.services.simpleworkflow.flow.StartWorkflowOptions
 import com.amazonaws.services.simpleworkflow.flow.WorkerBase
 import com.amazonaws.services.simpleworkflow.flow.WorkflowClientExternal
-import com.amazonaws.services.simpleworkflow.flow.WorkflowClientExternalBase
-import com.amazonaws.services.simpleworkflow.flow.WorkflowClientFactoryExternalBase
 import com.amazonaws.services.simpleworkflow.flow.WorkflowWorker
-import com.amazonaws.services.simpleworkflow.flow.generic.GenericWorkflowClientExternal
 import com.amazonaws.services.simpleworkflow.model.WorkflowExecution
-import com.amazonaws.services.simpleworkflow.model.WorkflowType
 import com.google.common.collect.ImmutableMap
 import com.google.common.collect.ImmutableSet
 import com.netflix.asgard.deployment.DeploymentActivitiesImpl
 import com.netflix.asgard.deployment.DeploymentWorkflow
 import com.netflix.asgard.deployment.DeploymentWorkflowDescriptionTemplate
 import com.netflix.asgard.deployment.DeploymentWorkflowImpl
-import com.netflix.asgard.flow.GlobalWorkflowAttributes
-import com.netflix.asgard.flow.InterfaceBasedWorkflowClient
-import com.netflix.asgard.flow.WorkflowDescriptionTemplate
-import com.netflix.asgard.flow.WorkflowMetaAttributes
+import com.netflix.asgard.model.SimpleDbSequenceLocator
 import com.netflix.asgard.model.SwfWorkflowTags
+import com.netflix.glisten.GlobalWorkflowAttributes
+import com.netflix.glisten.InterfaceBasedWorkflowClient
+import com.netflix.glisten.WorkflowClientFactory
+import com.netflix.glisten.WorkflowDescriptionTemplate
 import org.springframework.beans.factory.InitializingBean
 
 /**
@@ -34,12 +42,15 @@ import org.springframework.beans.factory.InitializingBean
  */
 class FlowService implements InitializingBean {
 
-    AwsClientService awsClientService
-    AmazonSimpleWorkflow simpleWorkflow
-    ConfigService configService
+    def awsClientService
+    def configService
+    def idService
+    DeploymentActivitiesImpl deploymentActivitiesImpl
 
     WorkflowWorker workflowWorker
     ActivityWorker activityWorker
+
+    WorkflowClientFactory workflowClientFactory
 
     // For every workflow the following data structures should be populated.
     /** Declares workflow implementations. */
@@ -48,27 +59,19 @@ class FlowService implements InitializingBean {
     final ImmutableMap<Class<?>, WorkflowDescriptionTemplate> workflowToDescriptionTemplate = ImmutableMap.copyOf([
             (DeploymentWorkflow): new DeploymentWorkflowDescriptionTemplate()
     ] as Map)
-    /** Declares workflow activity implementations. */
-    final ImmutableSet<Object> activityImplementations = ImmutableSet.of(new DeploymentActivitiesImpl())
-
-    /** The AWS SWF domain that will be used in this service for polling and scheduling workflows */
-    private String domain
-
-    /** The AWS SWF domain that will be used in this service for polling and scheduling workflows */
-    String taskList
 
     void afterPropertiesSet() {
-        domain = configService.simpleWorkflowDomain
-        taskList = configService.simpleWorkflowTaskList
+        String domain = configService.simpleWorkflowDomain
+        String taskList = configService.simpleWorkflowTaskList
         GlobalWorkflowAttributes.taskList = taskList
-        simpleWorkflow = awsClientService.create(AmazonSimpleWorkflow)
-        activityImplementations.each { Spring.autowire(it) }
+        AmazonSimpleWorkflow simpleWorkflow = awsClientService.create(AmazonSimpleWorkflow)
+        workflowClientFactory = new WorkflowClientFactory(simpleWorkflow, domain, taskList)
         workflowWorker = new WorkflowWorker(simpleWorkflow, domain, taskList)
         workflowWorker.setWorkflowImplementationTypes(workflowImplementationTypes)
         workflowWorker.start()
         log.info(workerStartMessage('Workflow', workflowWorker))
         activityWorker = activityWorker ?: new ActivityWorker(simpleWorkflow, domain, taskList)
-        activityWorker.addActivitiesImplementations(activityImplementations)
+        activityWorker.addActivitiesImplementations([deploymentActivitiesImpl])
         activityWorker.start()
         log.info(workerStartMessage('Activity', activityWorker))
     }
@@ -89,22 +92,9 @@ class FlowService implements InitializingBean {
     public <T> InterfaceBasedWorkflowClient<T> getNewWorkflowClient(UserContext userContext,
             Class<T> workflow, Link link = null) {
         WorkflowDescriptionTemplate workflowDescriptionTemplate = workflowToDescriptionTemplate[workflow]
-        WorkflowType workflowType = new WorkflowMetaAttributes(workflow).workflowType
-        def factory = new WorkflowClientFactoryExternalBase<InterfaceBasedWorkflowClient>(simpleWorkflow, domain) {
-            @Override
-            protected InterfaceBasedWorkflowClient createClientInstance(WorkflowExecution workflowExecution,
-                    StartWorkflowOptions options, DataConverter dataConverter,
-                    GenericWorkflowClientExternal genericClient) {
-                new InterfaceBasedWorkflowClient(workflow, workflowDescriptionTemplate, workflowExecution, workflowType,
-                        options, dataConverter, genericClient, new SwfWorkflowTags())
-            }
-        }
-        SwfWorkflowTags workflowTags = new SwfWorkflowTags()
-        workflowTags.user = userContext
-        workflowTags.link = link
-        factory.startWorkflowOptions = new StartWorkflowOptions(tagList: workflowTags.constructTags(),
-                taskList: taskList)
-        factory.client
+        String id = idService.nextId(userContext, SimpleDbSequenceLocator.Task)
+        SwfWorkflowTags tags = new SwfWorkflowTags(id: id, user: userContext, link: link)
+        workflowClientFactory.getNewWorkflowClient(workflow, workflowDescriptionTemplate, tags)
     }
 
     /**
@@ -114,15 +104,7 @@ class FlowService implements InitializingBean {
      * @return the workflow client
      */
     public WorkflowClientExternal getWorkflowClient(WorkflowExecution workflowIdentification) {
-        def factory = new WorkflowClientFactoryExternalBase<WorkflowClientExternal>(simpleWorkflow, domain) {
-            @Override
-            protected WorkflowClientExternal createClientInstance(WorkflowExecution workflowExecution,
-                    StartWorkflowOptions options, DataConverter dataConverter,
-                    GenericWorkflowClientExternal genericClient) {
-                new WorkflowClientExternalBase(workflowExecution, null, options, dataConverter, genericClient) {}
-            }
-        }
-        factory.getClient(workflowIdentification)
+        workflowClientFactory.getWorkflowClient(workflowIdentification)
     }
 
     /**
@@ -133,9 +115,7 @@ class FlowService implements InitializingBean {
      * @return the workflow client
      */
     ManualActivityCompletionClient getManualActivityCompletionClient(String taskToken) {
-        ManualActivityCompletionClientFactory manualCompletionClientFactory =
-            new ManualActivityCompletionClientFactoryImpl(simpleWorkflow)
-        manualCompletionClientFactory.getClient(taskToken)
+        workflowClientFactory.getManualActivityCompletionClient(taskToken)
     }
 
 }
