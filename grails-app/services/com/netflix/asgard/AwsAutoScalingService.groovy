@@ -60,7 +60,6 @@ import com.amazonaws.services.ec2.model.SecurityGroup
 import com.amazonaws.services.elasticloadbalancing.model.LoadBalancerDescription
 import com.google.common.collect.ImmutableSet
 import com.netflix.asgard.cache.CacheInitializer
-import com.netflix.asgard.flow.LogMessage;
 import com.netflix.asgard.model.AlarmData
 import com.netflix.asgard.model.ApplicationInstance
 import com.netflix.asgard.model.AutoScalingGroupBeanOptions
