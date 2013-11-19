@@ -165,7 +165,7 @@ class RestClientRightScaleService implements InitializingBean {
         try {
             HttpResponse httpResponse = httpClient.execute(request)
 			httpClient.getCookieStore().getCookies().each { 
-				log.warn it
+				log.debug it
 			}
             Object retVal = responseHandler(httpResponse)
             // Ensure the connection gets released to the manager.

@@ -165,11 +165,11 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		if (region.code == Region.SL_US_REGION_CODE) {
 			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-			log.warn resp1
+			log.debug resp1
 			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters')
 			def List<AvailabilityZone> zones = []
 			json.each {
-				log.warn "instance = " + it
+				log.debug "instance = " + it
 				// {"description":"DAL05 - Dallas - Central U.S.",
 				// "name":"DAL05 - Dallas - Central U.S.",
 				// "links":[
@@ -188,7 +188,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		else {
 			result = awsClient.by(region).describeAvailabilityZones(new DescribeAvailabilityZonesRequest()).getAvailabilityZones()
 		}
-		//log.warn "availability zones = " + result
+		//log.debug "availability zones = " + result
 		//availability zones = [{ZoneName: ap-southeast-2a, State: available, RegionName: ap-southeast-2, Messages: [], },
 		// {ZoneName: ap-southeast-2b, State: available, RegionName: ap-southeast-2, Messages: [], }]
 
@@ -219,12 +219,12 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.warn resp1
+		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
 		List<Image> images = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
-			log.warn "json image = " + it
+			log.debug "json image = " + it
 			String href = getRightScaleImageHref(it.links)
 			String imageId = href.substring(href.lastIndexOf('/')+1)
 			Tag tag = new Tag(
@@ -249,11 +249,11 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 				virtualizationType: 'paravirtual',
 				//Tags: [],
 				hypervisor: 'fakehv').withTags([tag])
-			log.warn "image = " + image
+			log.debug "image = " + image
 			
 			images.add(image)
 		}
-		log.warn 'images = ' + images
+		log.debug 'images = ' + images
 		return images
 	}
 	
@@ -261,7 +261,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.warn resp1
+		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		String href = getRightScaleImageHref(it.links)
@@ -290,7 +290,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 			hypervisor: 'fakehv').
 			withTags([tag])
 			
-		log.warn "image = " + image
+		log.debug "image = " + image
 		image
 	}
 
@@ -316,7 +316,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
             // Merge the images with tags issue and add any tagless images to the list
             images = images.collect { imageIdToImageWithTags[it.imageId] ?: it }
         }
-		//log.warn "images = " + images
+		//log.debug "images = " + images
 //		images = [
 //			{
 //				ImageId: ami-00d29669,
@@ -598,7 +598,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 				)
 			]
 		}
-		//log.warn awsClient.by(region).describeSecurityGroups().securityGroups
+		//log.debug awsClient.by(region).describeSecurityGroups().securityGroups
 		//[{
 			//OwnerId: 665469383253,
 			//GroupName: default,
@@ -896,7 +896,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.warn resp1
+		log.debug resp1
 		JSONObject json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		def instance = new Instance(
@@ -920,12 +920,12 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.warn resp1
+		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json?view=extended')
 		List<Instance> instances = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
-			log.warn "instance = " + it
+			log.debug "instance = " + it
 			def instance = new Instance(
 				instanceId: it.links ? getInstanceIdFromRelLinks(it.links) : 'unavailable',
 				imageId: it.links ? getImageIdFromRelLinks(it.links) : 'unavailable',

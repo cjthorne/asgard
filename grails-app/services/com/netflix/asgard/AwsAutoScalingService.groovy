@@ -290,7 +290,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		JSONArray jsonArrays = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays?view=instance_detail')
 		List<AutoScalingGroup> groups = []
 		jsonArrays.each {
-			log.warn "array = " + it
+			log.debug "array = " + it
 			String arrayId = getRightScaleServerArrayId(it.links)
 			String nextInstanceId = getRightScaleServerArrayFirstInstanceId(it.links) ?: 'unknown'
 			TagDescription tag1 = new TagDescription(
@@ -324,10 +324,10 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 						azNames.add(az.zoneName)
 					}
 				}
-				log.warn 'az = ' + az
+				log.debug 'az = ' + az
 			}
 			
-			log.warn 'azNames = ' + azNames
+			log.debug 'azNames = ' + azNames
 			
 			def AutoScalingGroup group = new AutoScalingGroup(
 				autoScalingGroupName : it.name,
@@ -354,7 +354,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			group.setInstances(instances)
 			groups.add(group)
 		}
-		log.warn 'groups = ' + groups
+		log.debug 'groups = ' + groups
 		return groups
 	}
 
@@ -382,7 +382,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             }
             result = retrieveAutoScalingGroups(region, result.getNextToken())
         }
-		log.warn 'groups for ' + region.code + ' = ' + groups
+		log.debug 'groups for ' + region.code + ' = ' + groups
 		//[{
 		//AutoScalingGroupName: acmeair_auth_service_tc7,
 		//AutoScalingGroupARN: arn:aws:autoscaling:us-east-1:665469383253:autoScalingGroup:5c2670b0-ef31-4d7d-9a24-ff9ec4ab0dc5:autoScalingGroupName/acmeair_auth_service_tc7,
@@ -476,7 +476,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			List<AutoScalingGroup> groups
 			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				groups = retrieveAllRightScaleArraysByNames(names)
-				log.warn groups
+				log.debug groups
 			}
 			else {
 				DescribeAutoScalingGroupsResult result = awsClient.by(userContext.region).describeAutoScalingGroups(
@@ -895,7 +895,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-			log.warn resp1
+			log.debug resp1
 			
 			List<List<String>> params = [
 				['server_array[name]', arrayName],
@@ -917,7 +917,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			def List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(groupTemplate.availabilityZones, groupTemplate.maxSize)
 			
 			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', params + dcPolicy)
-			log.warn resp2
+			log.debug resp2
 			suspendedProcesses.each {
 				suspendProcess(userContext, it, name, task)
 			}
@@ -944,7 +944,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			]
 			allDcPolicies = allDcPolicies + dcPolicy
 		}
-		log.warn 'allDcPolicies = ' + allDcPolicies 
+		log.debug 'allDcPolicies = ' + allDcPolicies 
 		allDcPolicies
 	}
 	
@@ -1080,10 +1080,10 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 				def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
 					[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-				log.warn resp1
-				log.warn 'tags = ' + autoScalingGroupData.tags
+				log.debug resp1
+				log.debug 'tags = ' + autoScalingGroupData.tags
 				String serverid = autoScalingGroupData.tags.find { tag -> tag.key = 'rightscale_serverarrayid' }.value
-				log.warn 'serverid = ' + serverid
+				log.debug 'serverid = ' + serverid
 				boolean launchAndTerminateShouldBeDisabled = suspendProcessTypes.contains(AutoScalingProcessType.Launch) && suspendProcessTypes.contains(AutoScalingProcessType.Terminate)
 				
 				List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(autoScalingGroupData.availabilityZones, autoScalingGroupData.maxSize)
@@ -1095,7 +1095,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				] 
 
 				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, params + dcPolicy)
-				log.warn resp2
+				log.debug resp2
 			}
 			else {
 				processTypesToSuspend.each {
@@ -1310,7 +1310,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             result = retrieveLaunchConfigurationsForToken(region, result.getNextToken())
         }
         configs.each { ensureUserDataIsDecodedAndTruncated(it) }
-		//configs.each { log.warn "LaunchConfiguration = " + it }
+		//configs.each { log.debug "LaunchConfiguration = " + it }
 		// LaunchConfiguration = {LaunchConfigurationName: acmeairwebappwlp-v002-20130807025337,
 		//LaunchConfigurationARN: arn:aws:autoscaling:us-east-1:665469383253:launchConfiguration:85ab917f-4e17-4d7d-80be-13647c782986:launchConfigurationName/acmeairwebappwlp-v002-20130807025337,
 		//ImageId: ami-fe3d7a97, KeyName: acmeair-netflix, SecurityGroups: [acmeair-netflix], UserData: export CLOUD_ENVIRONMENT=prod
