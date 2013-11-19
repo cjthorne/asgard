@@ -124,6 +124,10 @@ class InstanceTypeService implements CacheInitializer {
     }
 
     private List<InstanceTypeData> buildInstanceTypes(Region region) {
+		
+		if (region.code == Region.SL_US_REGION_CODE) {
+			return []
+		}
 
         Map<String, InstanceTypeData> namesToInstanceTypeDatas = [:]
         Set<InstanceType> enumInstanceTypes = InstanceType.values() as Set
