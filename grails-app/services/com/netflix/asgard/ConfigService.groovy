@@ -360,8 +360,16 @@ class ConfigService {
 	String getRightScaleMultiCloudImageRestHref() {
 		grailsApplication.config.secretRightScale?.multiCloudImageRestHref ?: null
 	}
-	
-    String getAccessIdFileName() {
+
+	String getSoftLayerAPIUsername() {
+		grailsApplication.config.secretSoftLayer?.apiUsername ?: null
+	}
+
+	String getSoftLayerAPIAccessKey() {
+		grailsApplication.config.secretSoftLayer?.apiAccessKey ?: null
+	}
+
+	String getAccessIdFileName() {
         grailsApplication.config.secret?.accessIdFileName ?: null
     }
 

@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit
 import org.apache.http.HttpEntity
 import org.apache.http.HttpHost
 import org.apache.http.HttpResponse
+import org.apache.http.auth.AuthScope
+import org.apache.http.auth.UsernamePasswordCredentials
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.apache.http.client.methods.HttpDelete
 import org.apache.http.client.methods.HttpGet
@@ -41,6 +43,7 @@ import org.apache.http.params.HttpConnectionParams
 import org.apache.http.util.EntityUtils
 import org.springframework.beans.factory.InitializingBean
 import sun.net.InetAddressCachePolicy
+import org.apache.commons.codec.binary.Base64;
 
 @SuppressWarnings('ImportFromSunPackages')
 class RestClientService implements InitializingBean {
@@ -74,6 +77,11 @@ class RestClientService implements InitializingBean {
         avoidLongCachingOfDnsResults()
         connectionManager.maxTotal = configService.httpConnPoolMaxSize
         connectionManager.defaultMaxPerRoute = configService.httpConnPoolMaxForRoute
+		
+		httpClient.getCredentialsProvider().setCredentials(
+			new AuthScope("api.softlayer.com", 443),
+			new UsernamePasswordCredentials(configService.getSoftLayerAPIUsername(), configService.getSoftLayerAPIAccessKey())
+		)
     }
 
     /**

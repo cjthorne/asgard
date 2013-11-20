@@ -31,6 +31,7 @@ import com.amazonaws.services.elasticloadbalancing.model.DescribeLoadBalancersRe
 import com.amazonaws.services.elasticloadbalancing.model.DetachLoadBalancerFromSubnetsRequest
 import com.amazonaws.services.elasticloadbalancing.model.DisableAvailabilityZonesForLoadBalancerRequest
 import com.amazonaws.services.elasticloadbalancing.model.EnableAvailabilityZonesForLoadBalancerRequest
+import com.amazonaws.services.elasticloadbalancing.model.HealthCheck
 import com.amazonaws.services.elasticloadbalancing.model.Instance
 import com.amazonaws.services.elasticloadbalancing.model.InstanceState
 import com.amazonaws.services.elasticloadbalancing.model.Listener
@@ -43,6 +44,10 @@ import com.netflix.asgard.cache.CacheInitializer
 import com.netflix.asgard.model.InstanceStateData
 import com.netflix.asgard.model.SubnetTarget
 import com.netflix.asgard.model.Subnets
+import org.codehaus.groovy.grails.web.json.JSONArray
+import org.codehaus.groovy.grails.web.json.JSONObject
+import org.joda.time.format.DateTimeFormatter
+import org.joda.time.format.DateTimeFormat
 import org.springframework.beans.factory.InitializingBean
 
 class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
@@ -56,6 +61,7 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
     Caches caches
     def configService
     def taskService
+	def restClientService
 
     void afterPropertiesSet() {
         awsClient = awsClient ?: new MultiRegionAwsClient<AmazonElasticLoadBalancing>( { Region region ->
@@ -85,8 +91,59 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
 
     // Load Balancers
 
+	private LoadBalancerDescription getLoadBalancerSoftLayer(String id) {
+		JSONObject virtIpWithServices = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=virtualServers.serviceGroups.services.ipAddress')
+		// TODO: really need to learn how to use multiple object masks.  using comma as documented threw errors
+		JSONObject virtIpWithIp = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=ipAddress')
+		JSONObject virtIpWithDCs = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=applicationDeliveryControllers.datacenter')
+		JSONObject virtIpWithBilling = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=billingItem')
+		def dcs = virtIpWithDCs.applicationDeliveryControllers.collect { it.datacenter.name }
+		def instanceIps = virtIpWithServices.virtualServers[0].serviceGroups.services[0].collect { it.ipAddress.ipAddress }
+		def instances = []
+		def DateTimeFormatter fmt = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ssZ")
+		def createdate = fmt.parseDateTime(virtIpWithBilling.billingItem.createDate).toDate()
+		instanceIps.each { ip ->
+			Instance i = new Instance(
+				instanceId : ip
+			)
+			instances.add(i)
+		}
+		String ipAddressOfLB = virtIpWithIp.ipAddress.ipAddress
+		log.debug 'service = ' + virtIpWithServices
+		log.debug 'ip = ' + virtIpWithIp
+		log.debug 'dcs = ' + dcs
+		LoadBalancerDescription lbd = new LoadBalancerDescription(
+			loadBalancerName : id,
+			dNSName : ipAddressOfLB,
+			availabilityZones : dcs,
+			policies : [],
+			listenerDescriptions : [],
+			instances : instances,
+			createdTime : createdate
+			).withHealthCheck(
+				new HealthCheck (
+					target : 'http',
+					interval : 30,
+					timeout : 30,
+					unhealthyThreshold : 3,
+					healthyThreshold : 3
+			)
+		)
+		lbd
+	}
+	
     private List<LoadBalancerDescription> retrieveLoadBalancers(Region region) {
-		if (region.code == Region.SL_US_REGION_CODE) return []
+        if (region.code == Region.SL_US_REGION_CODE) {
+			JSONArray loadBalancers = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Account/getAdcLoadBalancers.json?objectMask=adcLoadBalancers')
+			def ids = loadBalancers.collect { it.id }
+			log.debug '*** ids = ' + ids
+			def balancers = []
+			ids.each { id->
+				LoadBalancerDescription lbd = getLoadBalancerSoftLayer(id.toString())
+				balancers.add(lbd)
+			}
+            return balancers
+        }
         awsClient.by(region).describeLoadBalancers(new DescribeLoadBalancersRequest()).getLoadBalancerDescriptions()
     }
 
@@ -124,10 +181,16 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
         }
         LoadBalancerDescription loadBalancer
         try {
-            def loadBalancers = awsClient.by(userContext.region).describeLoadBalancers(
-                    new DescribeLoadBalancersRequest().withLoadBalancerNames([name])).getLoadBalancerDescriptions()
-            loadBalancer = Check.lone(loadBalancers, LoadBalancerDescription)
-        } catch (AmazonServiceException ignored) {
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+				loadBalancer = getLoadBalancerSoftLayer(name)
+			}
+			else {
+				def loadBalancers = awsClient.by(userContext.region).describeLoadBalancers(
+					new DescribeLoadBalancersRequest().withLoadBalancerNames([name])).getLoadBalancerDescriptions()
+				loadBalancer = Check.lone(loadBalancers, LoadBalancerDescription)
+
+			}
+		} catch (AmazonServiceException ignored) {
             loadBalancer = null
         }
         if (from != From.AWS_NOCACHE) {
@@ -171,6 +234,9 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
      */
     List<InstanceStateData> getInstanceStateDatas(UserContext userContext, String name,
                                                             List<AutoScalingGroup> groups) {
+		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			return []
+		}
         DescribeInstanceHealthRequest request = new DescribeInstanceHealthRequest().withLoadBalancerName(name)
         List<InstanceState> states = awsClient.by(userContext.region).describeInstanceHealth(request).instanceStates
         Map<String, String> instanceIdsToGroupNames = [:]
