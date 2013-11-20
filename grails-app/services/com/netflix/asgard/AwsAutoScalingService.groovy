@@ -914,7 +914,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				['server_array[elasticity_params][pacing][resize_down_by]', '1'],
 				['server_array[elasticity_params][pacing][resize_up_by]', '1']
 			]
-			def List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(groupTemplate.availabilityZones, groupTemplate.maxSize)
+			def List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(groupTemplate.availabilityZones)
 			
 			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', params + dcPolicy)
 			log.debug resp2
@@ -925,21 +925,19 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		getAutoScalingGroup(userContext, name)
 	}
 		
-	List<List<String>> getRightScaleDataCenterPolicy(List<String> selectedAZs, int maximum) {
+	List<List<String>> getRightScaleDataCenterPolicy(List<String> selectedAZs) {
 		def List<AvailabilityZone> allAzs = awsEc2Service.getAvailabilityZones(Region.SL_US)
 		def List<List<String>> allDcPolicies = []
-		def int weight = 100 / selectedAZs.size()
-		def int lastweight = weight + 100 % selectedAZs.size()
-		allAzs.eachWithIndex { az, index ->
-			def String azName = az.zoneName
-			def String datacenterId = az.messages[0].message
-			def boolean selected = azName in selectedAZs
-			def String w = selected ? ((allAzs.size == index - 1) ? lastWeight : weight) : '0'
-			def String maxInstances = selected ? maximum.toString() : '0'
+		def String weight = 100 / selectedAZs.size()
+		def String lastweight = weight + 100 % selectedAZs.size()
+		selectedAZs.eachWithIndex { az, index ->
+			def fullAz = allAzs.find { it.zoneName == az }
+			def String datacenterId = fullAz.messages[0].message
+			def w = (allAzs.size == index - 1) ? lastWeight : weight
 			def List<List<String>> dcPolicy = [
 				['server_array[datacenter_policy][][datacenter_href]',
 					'/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters/' + datacenterId],
-				['server_array[datacenter_policy][][max]', maxInstances],
+				['server_array[datacenter_policy][][max]', '0'],
 				['server_array[datacenter_policy][][weight]', w]
 			]
 			allDcPolicies = allDcPolicies + dcPolicy
@@ -1086,7 +1084,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				log.debug 'serverid = ' + serverid
 				boolean launchAndTerminateShouldBeDisabled = suspendProcessTypes.contains(AutoScalingProcessType.Launch) && suspendProcessTypes.contains(AutoScalingProcessType.Terminate)
 				
-				List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(autoScalingGroupData.availabilityZones, autoScalingGroupData.maxSize)
+				List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(autoScalingGroupData.availabilityZones)
 				
 				List<List<String>> params = [
 					['server_array[elasticity_params][bounds][min_count]' , autoScalingGroupData.minSize.toString()],
