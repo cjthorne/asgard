@@ -98,16 +98,18 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
 		JSONObject virtIpWithDCs = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=applicationDeliveryControllers.datacenter')
 		JSONObject virtIpWithBilling = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Network_Application_Delivery_Controller_LoadBalancer_VirtualIpAddress/' + id + '.json?objectMask=billingItem')
 		def dcs = virtIpWithDCs.applicationDeliveryControllers.collect { it.datacenter.name }
-		def instanceIps = virtIpWithServices.virtualServers[0].serviceGroups.services[0].collect { it.ipAddress.ipAddress }
 		def instances = []
-		def DateTimeFormatter fmt = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ssZ")
-		def createdate = fmt.parseDateTime(virtIpWithBilling.billingItem.createDate).toDate()
-		instanceIps.each { ip ->
-			Instance i = new Instance(
-				instanceId : ip
-			)
-			instances.add(i)
+		if (virtIpWithServices.virtualServers && virtIpWithServices.virtualServers.size() > 0) {
+			def instanceIps = virtIpWithServices.virtualServers[0].serviceGroups?.services[0]?.collect { it.ipAddress.ipAddress }
+			instanceIps.each { ip ->
+				Instance i = new Instance(
+					instanceId : ip
+				)
+				instances.add(i)
+			}
 		}
+		def fmt = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ssZ")
+		def createdate = fmt.parseDateTime(virtIpWithBilling.billingItem.createDate).toDate()
 		String ipAddressOfLB = virtIpWithIp.ipAddress.ipAddress
 		log.debug 'service = ' + virtIpWithServices
 		log.debug 'ip = ' + virtIpWithIp
