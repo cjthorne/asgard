@@ -67,6 +67,7 @@ import com.netflix.asgard.model.AutoScalingGroupData
 import com.netflix.asgard.model.AutoScalingProcessType
 import com.netflix.asgard.model.EurekaStatus
 import com.netflix.asgard.model.InstanceHealth
+import com.netflix.asgard.model.InstanceTypeData
 import com.netflix.asgard.model.LaunchConfigurationBeanOptions
 import com.netflix.asgard.model.ScalingPolicyData
 import com.netflix.asgard.model.SimpleDbSequenceLocator
@@ -306,7 +307,11 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				key : 'rightscale_next_instance_image_id',
 				value : nextInstance.imageId
 			)
-			
+			TagDescription tag4 = new TagDescription(
+				key : 'rightscale_instance_type_id',
+				value : nextInstance.instanceType
+			)
+
 			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' && policy.weight != '0' }
 			List<String> datacenters = nonZeroDCs*.datacenter_href;
 			
@@ -334,7 +339,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				minSize : it.elasticity_params.bounds.min_count.toInteger(),
 				maxSize : it.elasticity_params.bounds.max_count.toInteger(),
 				launchConfigurationName : 'fakeconfigname',
-				tags : [tag1, tag2, tag3],
+				tags : [tag1, tag2, tag3, tag4],
 				availabilityZones: azNames
 			)
 			
@@ -891,6 +896,10 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			String arrayName = groupTemplate.autoScalingGroupName
 			String arrayDesc = groupTemplate.autoScalingGroupName + ' auto generated description'
 			String cloudId = configService.getRightScaleCloudId()
+			def allInstanceTypes = caches.allInstanceTypes.by(Region.SL_US).list()
+			InstanceTypeData instanceType = allInstanceTypes?.find{ it.hardwareProfile.instanceType == launchConfigTemplate.instanceType }
+			String instanceTypeName = instanceType?.rightscaleInstanceTypeId
+			String instanceTypeHref = '/api/clouds/' + cloudId + '/instance_types/' + instanceTypeName
 			
 			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
 			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
@@ -906,6 +915,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				['server_array[instance][server_template_href]', '/api/server_templates/' + templateId],
 				['server_array[instance][cloud_href]', '/api/clouds/' + cloudId],
 				['server_array[instance][image_href]', imageHref],
+				['server_array[instance][instance_type_href]', instanceTypeHref],
 				['server_array[instance][multi_cloud_image_href]', configService.getRightScaleMultiCloudImageRestHref()],
 				['server_array[elasticity_params][alert_specific_params][decision_threshold]', '51'],
 				['server_array[elasticity_params][bounds][min_count]', groupTemplate.minSize.toString()],

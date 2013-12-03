@@ -50,6 +50,7 @@ class InstanceTypeService implements CacheInitializer {
     def configService
     def emailerService
     def restClientService
+	def restClientRightScaleService
 
     void initializeCaches() {
         // Use one thread for all these data sources. None of these need updating more than once an hour.
@@ -123,10 +124,44 @@ class InstanceTypeService implements CacheInitializer {
         caches.allSpotPrices.by(region)
     }
 
+	private List<InstanceTypeData> buildInstanceTypesRightscale() {
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.debug resp1
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
+
+		def instanceData = []
+		json.each { instancetype ->
+			HardwareProfile profile = new HardwareProfile(
+				instanceType : instancetype.description.replace(' ', '_'),
+				description : instancetype.description,
+				memory : instancetype.memory,
+				cpu : instancetype.cpu_speed + '*' + instancetype.cpu_count,
+				storage : "-unknown-",
+				architecture : "intel",
+				ioPerformance : "-unknown-"
+			)
+			String instanceTypeHref = instancetype.links.find { it.rel == 'self'}?.href
+			String instanceTypeId = instanceTypeHref?.substring(instanceTypeHref.lastIndexOf('/') + 1)
+			InstanceTypeData instanceTypeData = new InstanceTypeData(
+				hardwareProfile: profile,
+				rightscaleInstanceTypeId : instanceTypeId,
+				linuxOnDemandPrice: 0.0,
+				linuxReservedPrice: 0.0,
+				linuxSpotPrice: 0.0,
+				windowsOnDemandPrice: 0.0,
+				windowsReservedPrice: 0.0,
+				windowsSpotPrice: 0.0
+			)
+			instanceData.add(instanceTypeData)
+		}
+		instanceData
+	}
+	
     private List<InstanceTypeData> buildInstanceTypes(Region region) {
 		
 		if (region.code == Region.SL_US_REGION_CODE) {
-			return []
+			return buildInstanceTypesRightscale()
 		}
 
         Map<String, InstanceTypeData> namesToInstanceTypeDatas = [:]
@@ -190,7 +225,7 @@ class InstanceTypeService implements CacheInitializer {
     private List<HardwareProfile> retrieveHardwareProfiles() {
         parseHardwareProfilesDocument(fetchLocalInstanceTypesDocument())
     }
-
+	
     private List<HardwareProfile> parseHardwareProfilesDocument(Document instanceTypesDoc) {
 
         List<HardwareProfile> hardwareProfiles = []

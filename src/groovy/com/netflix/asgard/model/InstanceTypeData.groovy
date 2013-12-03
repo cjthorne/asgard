@@ -27,6 +27,11 @@ final class InstanceTypeData {
      * Technical specifications for a type of physical or virtual machine.
      */
     HardwareProfile hardwareProfile
+	
+	/**
+	 * Specific information for RightScale since there are no tags to overload in this object
+	 */
+	String rightscaleInstanceTypeId
 
     /**
      * Fixed hourly cost in dollars for a Linux machine to use promptly and for which there is no reservation.

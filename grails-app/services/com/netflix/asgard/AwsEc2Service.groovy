@@ -93,6 +93,7 @@ import com.google.common.collect.Multiset
 import com.google.common.collect.TreeMultiset
 import com.netflix.asgard.cache.CacheInitializer
 import com.netflix.asgard.model.AutoScalingGroupData
+import com.netflix.asgard.model.InstanceTypeData
 import com.netflix.asgard.model.SecurityGroupOption
 import com.netflix.asgard.model.Subnets
 import com.netflix.asgard.model.ZoneAvailability
@@ -882,6 +883,10 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	private getInstanceIdFromRelLinks(JSONArray links) {
 		getIdFromRelLinks(links, 'self')
 	}
+	
+	private getInstanceTypeIdFromRelLinks(JSONArray links) {
+		getIdFromRelLinks(links, 'instance_type')
+	}
 
 	private getIdFromRelLinks(JSONArray links, String relName) {
 		def link = links.find { it.rel == relName }
@@ -899,10 +904,16 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		log.debug resp1
 		JSONObject json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+
+		String instanceTypeId = json.links ? getInstanceTypeIdFromRelLinks(json.links) : '-unknown-'
+		def allInstanceTypes = caches.allInstanceTypes.by(Region.SL_US).list()
+		InstanceTypeData instanceType = allInstanceTypes?.find{ it.rightscaleInstanceTypeId == instanceTypeId }
+		String instanceTypeName = instanceType?.hardwareProfile?.instanceType
+
 		def instance = new Instance(
 			instanceId: json.links ? getInstanceIdFromRelLinks(json.links) : 'unavailable',
 			imageId: json.links ? getImageIdFromRelLinks(json.links) : 'unavailable',
-			instanceType: 'sl.fakesize',
+			instanceType: instanceTypeName ?: "unknown",
 			launchTime: dateParser.parse(json.created_at),
 			publicIpAddress : json.public_ip_addresses[0] ?: '',
 			privateIpAddress : json.private_ip_addresses[0] ?: '',
@@ -926,10 +937,16 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
 			log.debug "instance = " + it
+			
+			String instanceTypeId = it.links ? getInstanceTypeIdFromRelLinks(it.links) : '-unknown-'
+			def allInstanceTypes = caches.allInstanceTypes.by(Region.SL_US).list()
+			InstanceTypeData instanceType = allInstanceTypes?.find{ it.rightscaleInstanceTypeId == instanceTypeId }
+			String instanceTypeName = instanceType?.hardwareProfile?.instanceType
+			
 			def instance = new Instance(
 				instanceId: it.links ? getInstanceIdFromRelLinks(it.links) : 'unavailable',
 				imageId: it.links ? getImageIdFromRelLinks(it.links) : 'unavailable',
-				instanceType: 'sl.fakesize',
+				instanceType: instanceTypeName ?: "unknown",
 				launchTime: dateParser.parse(it.created_at),
 				publicIpAddress : it.public_ip_addresses[0] ?: '',
 				privateIpAddress : it.private_ip_addresses[0] ?: '',
