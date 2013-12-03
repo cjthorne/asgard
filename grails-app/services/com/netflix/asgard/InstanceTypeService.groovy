@@ -125,9 +125,6 @@ class InstanceTypeService implements CacheInitializer {
     }
 
 	private List<InstanceTypeData> buildInstanceTypesRightscale() {
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
 
 		def instanceData = []

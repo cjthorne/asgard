@@ -286,8 +286,6 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 	}
 
 	private List<AutoScalingGroup> retrieveAllRightScaleArrays() {
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
 		JSONArray jsonArrays = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays?view=instance_detail')
 		List<AutoScalingGroup> groups = []
 		jsonArrays.each {
@@ -901,11 +899,6 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			String instanceTypeName = instanceType?.rightscaleInstanceTypeId
 			String instanceTypeHref = '/api/clouds/' + cloudId + '/instance_types/' + instanceTypeName
 			
-			// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-			log.debug resp1
-			
 			List<List<String>> params = [
 				['server_array[name]', arrayName],
 				['server_array[description]', arrayDesc],
@@ -1085,10 +1078,6 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
         taskService.runTask(userContext, "Update Autoscaling Group '${autoScalingGroupData.autoScalingGroupName}'", { Task task ->
 			if (userContext.region.code == Region.SL_US_REGION_CODE) {
-				// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-				def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-					[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-				log.debug resp1
 				log.debug 'tags = ' + autoScalingGroupData.tags
 				String serverid = autoScalingGroupData.tags.find { tag -> tag.key = 'rightscale_serverarrayid' }.value
 				log.debug 'serverid = ' + serverid

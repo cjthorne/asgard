@@ -29,6 +29,7 @@ class InitService implements ApplicationContextAware {
 
     def configService
     def grailsApplication // modifying the config object directly here
+	def restClientRightScaleService
 
     /**
      * Creates the Asgard Config.groovy file and updates the in memory configuration to reflect the configured state
@@ -60,6 +61,9 @@ class InitService implements ApplicationContextAware {
      * Kicks off populating of caches and background threads
      */
     void initializeApplication() {
+		log.info 'logging into rightscale'
+		restClientRightScaleService.performLogin()
+		
         log.info 'Starting caches'
         Collection<CacheInitializer> cacheInitializers = applicationContext.getBeansOfType(CacheInitializer).values()
         for (CacheInitializer cacheInitializer in cacheInitializers) {

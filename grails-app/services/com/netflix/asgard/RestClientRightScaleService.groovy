@@ -43,6 +43,7 @@ import org.apache.http.client.params.ClientPNames
 import org.apache.http.client.params.CookiePolicy
 import org.apache.http.params.HttpConnectionParams
 import org.apache.http.util.EntityUtils
+import org.joda.time.DateTime
 import org.springframework.beans.factory.InitializingBean
 import sun.net.InetAddressCachePolicy
 
@@ -55,8 +56,9 @@ class RestClientRightScaleService implements InitializingBean {
     // Change to PoolingClientConnectionManager after upgrade to http-client 4.2.
     final ThreadSafeClientConnManager connectionManager = new ThreadSafeClientConnManager()
     final DefaultHttpClient httpClient = new DefaultHttpClient(connectionManager)
-
-
+	
+	static DateTime lastLoginTime = null
+	
     public void afterPropertiesSet() throws Exception {
         if (configService.proxyHost) {
             final HttpHost proxy = new HttpHost(configService.proxyHost, configService.proxyPort, 'http')
@@ -103,7 +105,30 @@ class RestClientRightScaleService implements InitializingBean {
         }
     }
 
+	def performLogin() {
+		def resp1 = post('https://my.rightscale.com/api/session', [
+			email : configService.getRightScaleEmail(),
+			password: configService.getRightScalePassword(),
+			account_href : '/api/accounts/' + configService.getRightScaleAccountId()],
+			false)
+		lastLoginTime = new DateTime()
+		log.info 'logging into rightscale at ' + lastLoginTime
+	}
+	
+	def needsToLogin() {
+		// RS cookies time out after 2 hours
+		return (lastLoginTime == null || new DateTime().isAfter(lastLoginTime.plusMinutes(90)))
+	}
+	
+	def ensureLoggedIn() {
+		if (needsToLogin()) {
+			performLogin()
+		}
+	}
+	
     def getAsJson(String uri, Integer timeoutMillis = 10000) {
+		ensureLoggedIn()
+		
         try {
             String content = get(uri, 'application/json', timeoutMillis)
 
@@ -185,7 +210,11 @@ class RestClientRightScaleService implements InitializingBean {
      * @param query the name-value pairs to pass in the post body
      * @return int the HTTP response code
      */
-    int post(String uriPath, Map<String, String> query) {
+    int post(String uriPath, Map<String, String> query, boolean ensureLogin = true) {
+		if (ensureLogin) { // perform login uses this method with false
+			ensureLoggedIn()
+		}
+		
         HttpPost httpPost = new HttpPost(uriPath)
 		httpPost.setHeader('X_API_VERSION', '1.5')
         httpPost.setEntity(new UrlEncodedFormEntity(query.collect { key, value ->
@@ -201,6 +230,8 @@ class RestClientRightScaleService implements InitializingBean {
 	 * @return int the HTTP response code
 	 */
 	int post(String uriPath, List<List<String>> query) {
+		ensureLoggedIn()
+		
 		HttpPost httpPost = new HttpPost(uriPath)
 		httpPost.setHeader('X_API_VERSION', '1.5')
 		List<BasicNameValuePair> params = []
@@ -250,6 +281,8 @@ class RestClientRightScaleService implements InitializingBean {
 	 * @return int the HTTP response code
 	 */
 	int put(String uri, List<List<String>> query) {
+		ensureLoggedIn()
+		
 		def put = new HttpPut(uri)
 		put.setHeader('X_API_VERSION', '1.5')
 		List<BasicNameValuePair> params = []
@@ -261,6 +294,8 @@ class RestClientRightScaleService implements InitializingBean {
 	}
 	
     int put(String uri, Map<String, String> query = [:]) {
+		ensureLoggedIn()
+
 		def put = new HttpPut(uri)
 		put.setEntity(new UrlEncodedFormEntity(query.collect { key, value ->
 			new BasicNameValuePair(key, value)

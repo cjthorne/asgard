@@ -164,9 +164,6 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     private List<AvailabilityZone> retrieveAvailabilityZones(Region region) {
 		def List<AvailabilityZone> result
 		if (region.code == Region.SL_US_REGION_CODE) {
-			def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-				[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-			log.debug resp1
 			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters')
 			def List<AvailabilityZone> zones = []
 			json.each {
@@ -217,10 +214,6 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 
 	private List<Image> retrieveAllRightScaleImages(Region region) {
-		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
 		List<Image> images = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -259,10 +252,6 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 	
 	private List<Image> retrieveRightScaleImage(String imageId) {
-		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		String href = getRightScaleImageHref(it.links)
@@ -898,10 +887,6 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 
 	private Instance getRightScaleInstance(String instanceId) {
-		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.debug resp1
 		JSONObject json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
@@ -928,10 +913,6 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 	
 	private List<Instance> getRightScaleInstances() {
-		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
-		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
-			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
-		log.debug resp1
 		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json?view=extended')
 		List<Instance> instances = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
