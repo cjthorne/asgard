@@ -569,24 +569,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 
     private List<SecurityGroup> retrieveSecurityGroups(Region region) {
 		if (region.code == Region.SL_US_REGION_CODE) {
-			return [new SecurityGroup(
-				ownerId: '12345',
-				groupName: 'default',
-				groupId: 'sg-fake',
-				description: 'fake security group',
-				//IpPermissions: [{IpProtocol: -1, UserIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }], IpRanges: [], }],
-				//IpPermissionsEgress: [{IpProtocol: -1, UserIdGroupPairs: [], IpRanges: [0.0.0.0/0], }],
-				vpcId: 'vpc-fake'
-				// Tags: []
-				).withIpPermissions([
-					new IpPermission(
-						ipProtocol: 'tcp', 
-						//userIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }],
-						//IpRanges: []
-					).withFromPort(0).withToPort(100)
-					]
-				)
-			]
+			return [fakeSecurityGroupForSoftLayer()]
 		}
 		//log.debug awsClient.by(region).describeSecurityGroups().securityGroups
 		//[{
@@ -608,9 +591,31 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
         getSecurityGroups(userContext).findAll { it.groupName ==~ pat }
     }
 
+	def fakeSecurityGroupForSoftLayer() {
+		new SecurityGroup(
+			ownerId: '12345',
+			groupName: 'default',
+			groupId: 'sg-fake',
+			description: 'fake security group',
+			//IpPermissions: [{IpProtocol: -1, UserIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }], IpRanges: [], }],
+			//IpPermissionsEgress: [{IpProtocol: -1, UserIdGroupPairs: [], IpRanges: [0.0.0.0/0], }],
+			vpcId: 'vpc-fake'
+			// Tags: []
+		).withIpPermissions([
+			new IpPermission(
+				ipProtocol: 'tcp',
+				//userIdGroupPairs: [{UserId: 665469383253, GroupId: sg-f49f7b9b, }],
+				//IpRanges: []
+			).withFromPort(0).withToPort(100)
+		])
+	}
+	
     SecurityGroup getSecurityGroup(UserContext userContext, String name, From from = From.AWS) {
         Region region = userContext.region
-        Check.notNull(name, SecurityGroup, "name")
+		if (region == Region.SL_US) {
+			return fakeSecurityGroupForSoftLayer()
+		}
+		Check.notNull(name, SecurityGroup, "name")
         String groupName
         DescribeSecurityGroupsRequest request = new DescribeSecurityGroupsRequest()
         String groupId = ''
