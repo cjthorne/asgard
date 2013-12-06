@@ -66,6 +66,9 @@ log4j = {
     error 'com.amazonaws', 'grails.spring', 'net.sf.ehcache', 'org.springframework', 'org.hibernate',
             'org.apache.catalina', 'org.apache.commons', 'org.apache.coyote', 'org.apache.jasper', 'org.apache.tomcat',
             'org.codehaus.groovy.grails'
+	
+	// TODO: disable this until RightScale fixes the fact that they send back an empty SetCookie header
+	error 'org.apache.http.client.protocol'
 
     environments {
         development {
