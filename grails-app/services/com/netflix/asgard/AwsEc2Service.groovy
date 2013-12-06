@@ -929,6 +929,12 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 			InstanceTypeData instanceType = allInstanceTypes?.find{ it.rightscaleInstanceTypeId == instanceTypeId }
 			String instanceTypeName = instanceType?.hardwareProfile?.instanceType
 			
+			List<AvailabilityZone> azs = getAvailabilityZones(Region.SL_US)
+			
+			String datacenterId = getIdFromRelLinks(it.links, 'datacenter')
+			AvailabilityZone datacenter = azs.find { it.messages[0].message == datacenterId }
+			String zoneName = datacenter?.zoneName ?: 'unknown'
+
 			def instance = new Instance(
 				instanceId: it.links ? getInstanceIdFromRelLinks(it.links) : 'unavailable',
 				imageId: it.links ? getImageIdFromRelLinks(it.links) : 'unavailable',
@@ -939,7 +945,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 				).withState(
 					new InstanceState(code: 80, name: it.state)
 				).withPlacement(
-					new Placement(availabilityZone: 'notreally-DAL01', groupName: '', tenancy: 'default')
+					new Placement(availabilityZone: zoneName, groupName: '', tenancy: 'default')
 				).withTags(
 					[ new Tag(key: 'Name', value: it.name) ]
 				).withMonitoring(new Monitoring(state : 'disabled'))
