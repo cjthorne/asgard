@@ -285,10 +285,15 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		href.substring(href.lastIndexOf('/') + 1)
 	}
 
-	private List<AutoScalingGroup> retrieveAllRightScaleArrays() {
+	private List<AutoScalingGroup> retrieveAllRightScaleArrays(Collection<String> names = null) {
 		JSONArray jsonArrays = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays?view=instance_detail')
 		List<AutoScalingGroup> groups = []
 		jsonArrays.each {
+			if (names != null) {
+				if (!names.find { name -> name == it.name }) {
+					return
+				}
+			}
 			log.debug "array = " + it
 			String arrayId = getRightScaleServerArrayId(it.links)
 			String nextInstanceId = getRightScaleServerArrayFirstInstanceId(it.links) ?: 'unknown'
@@ -313,7 +318,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' && policy.weight != '0' }
 			List<String> datacenters = nonZeroDCs*.datacenter_href;
 			
-			List<AvailabilityZone> azs = awsEc2Service.retrieveAvailabilityZones(Region.SL_US)
+			List<AvailabilityZone> azs = awsEc2Service.getAvailabilityZones(Region.SL_US)
 			List<String> azNames = []
 			
 			datacenters.each { dc->
@@ -341,13 +346,15 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				availabilityZones: azNames
 			)
 			
-			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances')
+			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances?view=extended')
 			List<Instance> instances = []
 			jsonInstances.each {
 				String instanceId = getIdFromRelLinks(it.links, 'self')
+				String datacenterId = getIdFromRelLinks(it.links, 'datacenter')
+				AvailabilityZone datecenter = azs.find { it.messages[0].message == datacenterId }
 				Instance instance = new Instance(
 					instanceId : instanceId, // TODO - get real instance data
-					availabilityZone: 'notreally-DAL01',
+					availabilityZone: datecenter.zoneName,
 					healthStatus: 'sick',
 					launchConfigurationName : 'fakeconfigname'
 					//lifeCycleState
@@ -363,13 +370,8 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
 	private List<AutoScalingGroup> retrieveAllRightScaleArraysByNames(Collection<String> names) {
 		// TODO:  look for a more efficient query to rightscale
-		List<AutoScalingGroup> allGroups = retrieveAllRightScaleArrays();
-		List<AutoScalingGroup> matched = []
-		names.each { name->
-			def List<AutoScalingGroup> results = allGroups.findAll({ it -> it.getAutoScalingGroupName()  == name})
-			results.each { matched.add(it) }
-		}
-		matched
+		List<AutoScalingGroup> allGroups = retrieveAllRightScaleArrays(names);
+		allGroups
 	}
 
     private List<AutoScalingGroup> retrieveAutoScalingGroups(Region region) {

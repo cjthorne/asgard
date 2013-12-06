@@ -45,7 +45,10 @@ class FlowService implements InitializingBean {
     def awsClientService
     def configService
     def idService
-    DeploymentActivitiesImpl deploymentActivitiesImpl
+	
+	def grailsApplication
+    
+	DeploymentActivitiesImpl deploymentActivitiesImpl
 
     WorkflowWorker workflowWorker
     ActivityWorker activityWorker
@@ -65,15 +68,17 @@ class FlowService implements InitializingBean {
         String taskList = configService.simpleWorkflowTaskList
         GlobalWorkflowAttributes.taskList = taskList
         AmazonSimpleWorkflow simpleWorkflow = awsClientService.create(AmazonSimpleWorkflow)
-        workflowClientFactory = new WorkflowClientFactory(simpleWorkflow, domain, taskList)
-        workflowWorker = new WorkflowWorker(simpleWorkflow, domain, taskList)
-        workflowWorker.setWorkflowImplementationTypes(workflowImplementationTypes)
-        workflowWorker.start()
-        log.info(workerStartMessage('Workflow', workflowWorker))
-        activityWorker = activityWorker ?: new ActivityWorker(simpleWorkflow, domain, taskList)
-        activityWorker.addActivitiesImplementations([deploymentActivitiesImpl])
-        activityWorker.start()
-        log.info(workerStartMessage('Activity', activityWorker))
+		if (grailsApplication.config.initializeWorkflowEngine) {
+	        workflowClientFactory = new WorkflowClientFactory(simpleWorkflow, domain, taskList)
+	        workflowWorker = new WorkflowWorker(simpleWorkflow, domain, taskList)
+	        workflowWorker.setWorkflowImplementationTypes(workflowImplementationTypes)
+	        workflowWorker.start()
+	        log.info(workerStartMessage('Workflow', workflowWorker))
+	        activityWorker = activityWorker ?: new ActivityWorker(simpleWorkflow, domain, taskList)
+	        activityWorker.addActivitiesImplementations([deploymentActivitiesImpl])
+	        activityWorker.start()
+	        log.info(workerStartMessage('Activity', activityWorker))
+		}
     }
 
     private String workerStartMessage(String workerType, WorkerBase workerBase) {
