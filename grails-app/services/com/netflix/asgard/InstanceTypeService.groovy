@@ -157,7 +157,7 @@ class InstanceTypeService implements CacheInitializer {
 	
     private List<InstanceTypeData> buildInstanceTypes(Region region) {
 		
-		if (region.code == Region.SL_US_REGION_CODE) {
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return buildInstanceTypesRightscale()
 		}
 

@@ -91,37 +91,46 @@
        <g:link class="applications" controller="application" action="list">App</g:link>
        <ul>
          <li class="menuButton"><g:link class="applications" controller="application" action="list">Applications</g:link></li>
+<!--
          <li class="menuButton"><g:link class="stacks" controller="stack" action="list">Stacks</g:link></li>
+-->
          <li class="menuButton"><g:link class="users" controller="application" action="owner">Owners</g:link></li>
+<!--
          <li class="menuButton"><g:link class="securityGroups" controller="security" action="list">Security Groups</g:link></li>
+-->
          <g:extLinkToPropertiesConsole />
        </ul>
      </li>
-     <li class="menuButton"><g:link class="images" controller="image" action="list">AMI</g:link></li>
+     <li class="menuButton"><g:link class="images" controller="image" action="list">Image</g:link></li>
      <li class="menuButton">
        <g:link class="cluster" controller="cluster" action="list">Cluster</g:link>
        <ul>
          <li class="menuButton"><g:link class="cluster" controller="cluster" action="list">Clusters</g:link></li>
          <li class="menuButton"><g:link class="autoScaling" controller="autoScaling" action="list">Auto Scaling Groups</g:link></li>
+<!--
          <li class="menuButton"><g:link class="launchConfigs" controller="launchConfiguration" action="list">Launch Configurations</g:link></li>
          <li class="menuButton"><g:link class="scalingPolicy" controller="scalingPolicy" action="list">Scaling Policies</g:link></li>
          <li class="menuButton"><g:link class="scheduledAction" controller="scheduledAction" action="list">Scheduled Actions</g:link></li>
          <li class="menuButton"><g:link class="alarm" controller="alarm" action="list">CloudWatch Alarms</g:link></li>
+-->
        </ul>
      </li>
-     <li class="menuButton"><g:link class="loadBalancers" controller="loadBalancer" action="list">ELB</g:link></li>
+     <li class="menuButton"><g:link class="loadBalancers" controller="loadBalancer" action="list">LBs</g:link></li>
      <li class="menuButton">
-         <g:link class="instances" controller="instance" action="list">EC2</g:link>
+         <g:link class="instances" controller="instance" action="list">IaaS</g:link>
          <ul>
            <li class="menuButton"><g:link class="instances" controller="instance" action="list">Instances</g:link></li>
            <li class="menuButton"><g:link class="instanceTypes" controller="instanceType" action="list">Instance Types</g:link></li>
            <g:if test="${spotInstancesAreAppropriate}">
              <li class="menuButton"><g:link class="spotInstanceRequest" controller="spotInstanceRequest" action="list">Spot Instance Requests</g:link></li>
            </g:if>
+<!--
            <li class="menuButton"><g:link class="volumes" controller="volume" action="list">EBS Volumes</g:link></li>
            <li class="menuButton"><g:link class="volumeSnapshot" controller="snapshot" action="list">EBS Snapshots</g:link></li>
+-->
          </ul>
      </li>
+ <!-- 
      <li class="menuButton">
        <g:link class="simpleDb" controller="domain" action="list">SDB</g:link>
      </li>
@@ -136,6 +145,7 @@
        </ul>
      </li>
      <li class="menuButton"><g:link class="tasks" controller="task" action="list">Task</g:link></li>
+-->  
    </ul>
   </g:if>
   <div class="clear"></div>

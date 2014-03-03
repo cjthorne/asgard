@@ -52,10 +52,12 @@
                                  title="An 'Auto Scaling Group' is where an Application defines its scaling parameters.">Auto Scaling</g:link> Groups</li>
               <li>Manage <g:link controller="loadBalancer" action="list"
                                  title="A 'Load Balancer' is where an Application defines its load balancing parameters for either frontend or middle tier.">Load Balancers</g:link></li>
+<!-- 
               <li>Manage <g:link controller="launchConfiguration" action="list"
                                  title="A 'Launch Configuration' is an Application's instance factory used by Auto Scaling to launch new instances.">Launch Configurations</g:link></li>
               <li>Manage <g:link controller="security" action="list"
                                  title="A 'Security Group' is the collection of network ingress rules for an Application.">Security Groups</g:link></li>
+ -->
               <li>Manage Running <g:link controller="instance" action="list"
                                          title="An 'Instance' is a single running machine instance of an Application.">Instances</g:link></li>
             </ul>

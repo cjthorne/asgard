@@ -68,12 +68,12 @@ enum Region {
             'Sao Paulo'
     ),
 
-	SL_US('sl-1',
+	US_SOUTH_1('us-south-1',
 		'us-east-1', // until pricing is working
-		'sl-1.png',
+		'us-south-1.png',
 		'Dallas'
 	)
-	static SL_US_REGION_CODE = 'sl-1'
+	static US_SOUTH_1_REGION_CODE = 'us-south-1'
 
     String code
     String pricingJsonCode
@@ -118,7 +118,7 @@ enum Region {
     static List<Region> getLimitedRegions() {
         String onlyRegions = System.getProperty('onlyRegions')
 		// TODO: only for quicker development - remove - for some reason using System Property killed gradlew
-		onlyRegions = "us-east-1,sl-1"
+		onlyRegions = "us-east-1,us-south-1"
         if (onlyRegions) {
             List<String> regionNames = onlyRegions.tokenize(',')
             return regionNames.collect { Region.withCode(it) }

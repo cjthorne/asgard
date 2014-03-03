@@ -318,7 +318,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			List<JSONObject> nonZeroDCs = it.datacenter_policy.findAll { policy -> policy.weight != '0.0' && policy.weight != '0' }
 			List<String> datacenters = nonZeroDCs*.datacenter_href;
 			
-			List<AvailabilityZone> azs = awsEc2Service.getAvailabilityZones(Region.SL_US)
+			List<AvailabilityZone> azs = awsEc2Service.getAvailabilityZones(Region.US_SOUTH_1)
 			List<String> azNames = []
 			
 			datacenters.each { dc->
@@ -350,12 +350,14 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			List<Instance> instances = []
 			jsonInstances.each {
 				String instanceId = getIdFromRelLinks(it.links, 'self')
+				// this will make the link to the instance not work (as it's different in RightScale), but will allow Eureka to work
+				instanceId = it.private_ip_addresses[0] ?: ''
 				String datacenterId = getIdFromRelLinks(it.links, 'datacenter')
 				AvailabilityZone datecenter = azs.find { it.messages[0].message == datacenterId }
 				Instance instance = new Instance(
-					instanceId : instanceId, // TODO - get real instance data
+					instanceId : instanceId,
 					availabilityZone: datecenter.zoneName,
-					healthStatus: 'sick',
+					healthStatus: 'sick', // TODO - get real instance data
 					launchConfigurationName : 'fakeconfigname'
 					//lifeCycleState
 					)
@@ -375,7 +377,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 	}
 
     private List<AutoScalingGroup> retrieveAutoScalingGroups(Region region) {
-		if (region.code == Region.SL_US_REGION_CODE) {
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return retrieveAllRightScaleArrays();
 		}
         List<AutoScalingGroup> groups = []
@@ -479,7 +481,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
                 return names.collect { caches.allAutoScalingGroups.by(userContext.region).get(it) }.findAll { it != null }
             }
 			List<AutoScalingGroup> groups
-			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 				groups = retrieveAllRightScaleArraysByNames(names)
 				log.debug groups
 			}
@@ -539,7 +541,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     static final Integer UNLIMITED = Integer.MAX_VALUE
 
     List<Activity> getAutoScalingGroupActivities(UserContext userContext, String name, Integer maxTotalActivities) {
-		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+		if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return []
 		}
         List<Activity> activities = []
@@ -609,7 +611,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     private List<ScalingPolicy> retrieveScalingPolicies(Region region) {
-		if (region.code == Region.SL_US_REGION_CODE) return []
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
         scalingPolicyRetriever.retrieve(region, new DescribePoliciesRequest())
     }
 
@@ -630,7 +632,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describePolicies(DescribePoliciesRequest)
      */
     List<ScalingPolicy> getScalingPoliciesForGroup(UserContext userContext, String autoScalingGroupName) {
-		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+		if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return []
 		}
         if (!autoScalingGroupName) { return [] }
@@ -774,7 +776,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
      * @see com.amazonaws.services.autoscaling.AmazonAutoScaling#describeScheduledActions(DescribeScheduledActionsRequest)
      */
     List<ScheduledUpdateGroupAction> getScheduledActionsForGroup(UserContext userContext, String autoScalingGroupName) {
-		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+		if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return []
 		}
         if (!autoScalingGroupName) { return [] }
@@ -783,7 +785,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     private List<ScheduledUpdateGroupAction> retrieveScheduledActions(Region region) {
-		if (region.code == Region.SL_US_REGION_CODE) return []
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
         scheduledActionRetriever.retrieve(region, new DescribeScheduledActionsRequest())
     }
 
@@ -889,14 +891,14 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 		String name = groupTemplate.autoScalingGroupName
 	
 		taskService.runTask(userContext, "Create Autoscaling Group '${name}'", { Task task ->
-			Image image = caches.allImages.by(Region.SL_US).get(launchConfigTemplate.imageId)
+			Image image = caches.allImages.by(Region.US_SOUTH_1).get(launchConfigTemplate.imageId)
 			String imageHref = image.tags.find { it.key = 'rightscale_imagehref'}.value
 			String deploymentId = configService.getRightScaleDeploymentId()
 			String templateId = configService.getRightScaleServerTemplateId()
 			String arrayName = groupTemplate.autoScalingGroupName
 			String arrayDesc = groupTemplate.autoScalingGroupName + ' auto generated description'
 			String cloudId = configService.getRightScaleCloudId()
-			def allInstanceTypes = caches.allInstanceTypes.by(Region.SL_US).list()
+			def allInstanceTypes = caches.allInstanceTypes.by(Region.US_SOUTH_1).list()
 			InstanceTypeData instanceType = allInstanceTypes?.find{ it.hardwareProfile.instanceType == launchConfigTemplate.instanceType }
 			String instanceTypeName = instanceType?.rightscaleInstanceTypeId
 			String instanceTypeHref = '/api/clouds/' + cloudId + '/instance_types/' + instanceTypeName
@@ -931,7 +933,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 	}
 		
 	List<List<String>> getRightScaleDataCenterPolicy(List<String> selectedAZs) {
-		def List<AvailabilityZone> allAzs = awsEc2Service.getAvailabilityZones(Region.SL_US)
+		def List<AvailabilityZone> allAzs = awsEc2Service.getAvailabilityZones(Region.US_SOUTH_1)
 		def List<List<String>> allDcPolicies = []
 		def String weight = 100 / selectedAZs.size()
 		def String lastweight = weight + 100 % selectedAZs.size()
@@ -1079,7 +1081,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         }
 
         taskService.runTask(userContext, "Update Autoscaling Group '${autoScalingGroupData.autoScalingGroupName}'", { Task task ->
-			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 				log.debug 'tags = ' + autoScalingGroupData.tags
 				String serverid = autoScalingGroupData.tags.find { tag -> tag.key = 'rightscale_serverarrayid' }.value
 				log.debug 'serverid = ' + serverid
@@ -1288,7 +1290,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 
     List<LaunchConfiguration> retrieveLaunchConfigurations(Region region) {
         List<LaunchConfiguration> configs = []
-		if (region.code == Region.SL_US_REGION_CODE) {
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) {
 			LaunchConfiguration config = new LaunchConfiguration(
 				launchConfigurationName : "fakeconfigname",
 				launchConfigurationARN : "fakearn",
@@ -1343,7 +1345,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             return caches.allLaunchConfigurations.by(userContext.region).get(name)
         }
 		List<LaunchConfiguration> launchConfigs = []
-		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+		if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 			LaunchConfiguration config = new LaunchConfiguration(
 				launchConfigurationName : "fakeconfigname",
 				launchConfigurationARN : "fakearn",
@@ -1430,7 +1432,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
             result.launchConfigName = launchConfigName
             result.autoScalingGroupName = groupName
 
-        if (userContext.region.code == Region.SL_US_REGION_CODE) {
+        if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
             result.launchConfigCreated = true // liar liar pants on fire, but not needed until we support multiple instance types	
         }
         else {
@@ -1443,7 +1445,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         }
 
         try {
-            if (userContext.region.code == Region.SL_US_REGION_CODE) {
+            if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
                 createAutoScalingGroupRightScale(userContext, groupTemplate, launchConfigTemplate, suspendedProcesses, task)
             }
             else {

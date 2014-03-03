@@ -53,7 +53,7 @@ class AwsSimpleDbService implements InitializingBean {
     // Domains
 
     List<String> listDomains(Region region) {
-		if (region.code == Region.SL_US_REGION_CODE) return []
+		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
 		
         List<String> domains = []
 

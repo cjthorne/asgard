@@ -131,7 +131,9 @@ class InstanceController {
 
     def diagnose = {
         UserContext userContext = UserContext.of(request)
-        String instanceId = EntityType.instance.ensurePrefix(params.instanceId ?: params.id)
+		// TODO:  should I do this or just get rid of prefix for InstanceTypes?
+        //String instanceId = EntityType.instance.ensurePrefix(params.instanceId ?: params.id)
+		String instanceId = params.instanceId ?: params.id
         ApplicationInstance appInst = discoveryService.getAppInstance(userContext, instanceId)
         Map details = [
             'discInstance' : appInst,
@@ -148,7 +150,7 @@ class InstanceController {
     def show = {
         UserContext userContext = UserContext.of(request)
 		String inputId = params.instanceId ?: params.id
-        String instanceId = userContext.region.code == Region.SL_US_REGION_CODE ? inputId : EntityType.instance.ensurePrefix(inputId)
+        String instanceId = userContext.region.code == Region.US_SOUTH_1_REGION_CODE ? inputId : EntityType.instance.ensurePrefix(inputId)
         String appName
         ApplicationInstance appInst
         if (params.appName) {

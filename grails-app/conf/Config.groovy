@@ -16,6 +16,7 @@
 import com.netflix.asgard.model.HardwareProfile
 import com.netflix.asgard.model.InstanceTypeData
 import org.apache.log4j.DailyRollingFileAppender
+import com.netflix.asgard.Region
 
 // http://grails.org/doc/latest/guide/3.%20Configuration.html#3.1.2 Logging
 log4j = {
@@ -211,6 +212,13 @@ environments {
             envStyle = 'prod'
         }
     }
+}
+
+eureka {
+	port = 8080
+	regionsToServers = [
+		(Region.US_SOUTH_1): 'eureka-server-here',
+	]
 }
 
 initializeWorkflowEngine = false

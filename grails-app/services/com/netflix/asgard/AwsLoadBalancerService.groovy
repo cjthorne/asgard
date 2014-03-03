@@ -135,7 +135,7 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
 	}
 	
     private List<LoadBalancerDescription> retrieveLoadBalancers(Region region) {
-        if (region.code == Region.SL_US_REGION_CODE) {
+        if (region.code == Region.US_SOUTH_1_REGION_CODE) {
 			JSONArray loadBalancers = restClientService.getAsJson('https://api.softlayer.com/rest/v3/SoftLayer_Account/getAdcLoadBalancers.json?objectMask=adcLoadBalancers')
 			def ids = loadBalancers.collect { it.id }
 			log.debug '*** ids = ' + ids
@@ -183,7 +183,7 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
         }
         LoadBalancerDescription loadBalancer
         try {
-			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 				loadBalancer = getLoadBalancerSoftLayer(name)
 			}
 			else {
@@ -236,7 +236,7 @@ class AwsLoadBalancerService implements CacheInitializer, InitializingBean {
      */
     List<InstanceStateData> getInstanceStateDatas(UserContext userContext, String name,
                                                             List<AutoScalingGroup> groups) {
-		if (userContext.region.code == Region.SL_US_REGION_CODE) {
+		if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 			return []
 		}
         DescribeInstanceHealthRequest request = new DescribeInstanceHealthRequest().withLoadBalancerName(name)

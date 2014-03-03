@@ -159,7 +159,7 @@ class AutoScalingController {
                     new Duration(Time.now(), dayAfterExpire).isShorterThan(maxExpirationDuration)
             String lcName = groupData?.launchConfigurationName
             LaunchConfiguration launchConfig = awsAutoScalingService.getLaunchConfiguration(userContext, lcName)
-			if (userContext.region.code == Region.SL_US_REGION_CODE) {
+			if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
 				launchConfig.imageId = groupData?.tags.find { tag -> tag.key == 'rightscale_next_instance_image_id' }.value
 				launchConfig.instanceType = groupData?.tags.find { tag -> tag.key == 'rightscale_instance_type_id' }.value
 			}
