@@ -974,16 +974,16 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
     }
 
     /**
-     * Analyze an ASG and determine if it is healthy.
+     * Analyze an ASG and determine if it is operational.
      *
      * @param userContext who made the call, why, and in what region
      * @param asgName name of the ASG
      * @param expectedInstanceCount number of instances that are expected
-     * @return a String describing why the ASG is unhealthy or null if it is healthy
+     * @return textual description of the reason the ASG is not operational, or an empty String if it is
      */
-    String reasonAsgIsUnhealthy(UserContext userContext, String asgName, int expectedInstanceCount) {
+    String reasonAsgIsNotOperational(UserContext userContext, String asgName, int expectedInstanceCount) {
         if (expectedInstanceCount == 0) {
-            return null
+            return ''
         }
         AutoScalingGroup asg = getAutoScalingGroup(userContext, asgName)
         if (!asg) {
@@ -995,18 +995,31 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
         if (asg.instances.find { it.lifecycleState != LifecycleState.InService.name() }) {
             return 'Waiting for instances to be in service.'
         }
-        List<ApplicationInstance> applicationInstances = discoveryService.getAppInstancesByIds(userContext,
-                asg.instances*.instanceId)
-        if (applicationInstances.size() < expectedInstanceCount) {
-            return 'Waiting for Eureka data about instances.'
+        if (configService.getRegionalDiscoveryServer(userContext.region)) {
+            List<ApplicationInstance> applicationInstances = discoveryService.getAppInstancesByIds(userContext,
+                    asg.instances*.instanceId)
+            if (applicationInstances.size() < expectedInstanceCount) {
+                return 'Waiting for Eureka data about instances.'
+            }
+            if (applicationInstances.find { it.status != EurekaStatus.UP.name() }) {
+                return 'Waiting for all instances to be available in Eureka.'
+            }
+            if (!awsEc2Service.checkHostsHealth(applicationInstances*.healthCheckUrl)) {
+                return 'Waiting for all instances to pass health checks.'
+            }
         }
-        if (applicationInstances.find { it.status != EurekaStatus.UP.name() }) {
-            return 'Waiting for all instances to be available in Eureka.'
+        if (asg.loadBalancerNames) {
+            String loadBalancerThatSeesOutOfServiceInstance = asg.loadBalancerNames.find {
+                if (asg.loadBalancerNames.size() > 1) { Time.sleepCancellably(250) }
+                awsLoadBalancerService.getInstanceStateDatas(userContext, it, [asg]).find {
+                    it.autoScalingGroupName == asg.autoScalingGroupName && it.state != LifecycleState.InService.name()
+                }
+            }
+            if (loadBalancerThatSeesOutOfServiceInstance) {
+                return 'Waiting for all instances to pass ELB health checks.'
+            }
         }
-        if (!awsEc2Service.checkHostsHealth(applicationInstances*.healthCheckUrl)) {
-            return 'Waiting for all instances to pass health checks.'
-        }
-        null
+        ''
     }
 
     /**

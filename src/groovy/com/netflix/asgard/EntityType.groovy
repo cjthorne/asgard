@@ -36,10 +36,14 @@ import com.amazonaws.services.elasticloadbalancing.model.SourceSecurityGroup
 import com.amazonaws.services.rds.model.DBInstance
 import com.amazonaws.services.rds.model.DBSecurityGroup
 import com.amazonaws.services.rds.model.DBSnapshot
+import com.amazonaws.services.route53.model.HostedZone
 import com.amazonaws.services.simpleworkflow.model.ActivityTypeInfo
 import com.amazonaws.services.simpleworkflow.model.DomainInfo
 import com.amazonaws.services.simpleworkflow.model.WorkflowExecutionInfo
 import com.amazonaws.services.simpleworkflow.model.WorkflowTypeInfo
+import com.fasterxml.jackson.annotation.JsonAutoDetect
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.google.common.collect.ImmutableBiMap
 import com.google.common.collect.ImmutableSet
 import com.netflix.asgard.model.ApplicationInstance
@@ -55,9 +59,6 @@ import com.netflix.asgard.push.Cluster
 import groovy.transform.Immutable
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
-import org.codehaus.jackson.annotate.JsonAutoDetect
-import org.codehaus.jackson.annotate.JsonCreator
-import org.codehaus.jackson.annotate.JsonProperty
 
 @JsonAutoDetect(getterVisibility=JsonAutoDetect.Visibility.NONE)
 @Immutable class EntityType<T> {
@@ -85,6 +86,7 @@ import org.codehaus.jackson.annotate.JsonProperty
             { Map attrs, String objectId -> attrs.params = [name: objectId] })
     static final EntityType<HardwareProfile> hardwareProfile = create('Hardware Profile',
             { it.instanceType.toString() })
+    static final EntityType<HostedZone> hostedZone = create('Hosted Zone', { it.id })
     static final EntityType<Image> image = create('Image', { it.imageId })
     static final EntityType<Instance> instance = create('Instance', { it.instanceId }, 'i-')
     static final EntityType<InstanceHealth> instanceHealth = create('Instance Health', { it.instanceId })
@@ -117,7 +119,6 @@ import org.codehaus.jackson.annotate.JsonProperty
     static final EntityType<WorkflowTypeInfo> workflowType = create('Workflow Type',
             { "${it.workflowType.name}-${it.workflowType.version}" as String })
     static final EntityType<DomainInfo> workflowDomain = create('Workflow Domain', { it.name })
-
 
     /**
      * Create an EntityType with specific attributes

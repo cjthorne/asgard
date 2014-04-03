@@ -1,3 +1,67 @@
+1.4.2
+
+Features
+- Stop entire workflow if exception happens at any time during long auto deployment
+- Auto deploy should still work even without Eureka configured
+
+Infrastructure
+- In-browser functional regression test suite with Geb
+- Updated to Glisten 0.3
+- Contributing guidelines document
+- More unit tests
+- More CodeNarc rules
+
+Bug Fixes
+- Fixed error on instance detail screen and rolling push
+- Made Volume cache loading optional for initialization, since it fails often and isn't very important
+
+
+1.4.1
+
+Bug Fixes
+- Support for updating load balancer in recent AWS region-accounts that have a default VPC
+- Support for creating auto scaling groups with load balancers in recent AWS region-accounts that have a default VPC
+- Only one auth-revoke task with many IP permissions for each security group pair change
+- Zebra-stripe more lists before JavaScript loads
+
+Infrastructure
+- Some code clean up
+- More unit tests
+
+
+1.4
+
+Features
+- Route53 interface
+- Instance sub-lists by Eureka application, where available
+- Allow editing SNS Topic MessageRetentionPeriod
+- Update SQS Queue policy automatically when the Queue gets subscribed to an SNS Topic
+- Navigation links between associated SNS Topic and SQS Queue detail screens
+- Verify ELB status for instances during auto deploy ASG health check
+- Expose AWS account attributes at /account/attributes.json
+- Monitor Bucket Type of "none" for applications
+- Show filter on Stack list screen
+
+Infrastructure
+- Many CodeNarc rules required
+- Suppress cookie warnings from remote servers in log
+- Sporadic unit test concurrency-based failure fixed
+- Don't pull in Glisten's transitive dependencies
+- Upgrade to AWS Java SDK 1.6.6
+- Update, harden, and simplify Instance Types metadata system
+- Removed jsoup dependency
+
+Bug Fixes
+- Handle badly formatted Workflow Execution tags gracefully
+
+
+1.3.1
+
+Bug Fixes
+- Fixed startup error for new Asgard installations that lack an existing Config.groovy file
+- Fixed startup error for AWS accounts that don't yet have an asgard SWF domain
+
+
 1.3
 
 Features

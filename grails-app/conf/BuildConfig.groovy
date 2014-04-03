@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import org.apache.ivy.plugins.resolver.FileSystemResolver
 import org.apache.ivy.plugins.resolver.URLResolver
+
 
 grails.project.work.dir = 'work'
 grails.project.class.dir = 'target/classes'
@@ -33,7 +35,7 @@ codenarc {
             title = 'Asgard CodeNarc Report'
         }
     }
-    ruleSetFiles='file:grails-app/conf/CodeNarcRuleSet.groovy'
+    ruleSetFiles = 'file:grails-app/conf/CodeNarcRuleSet.groovy'
     maxPriority1Violations = 0
     maxPriority2Violations = 0
     maxPriority3Violations = 0
@@ -81,45 +83,42 @@ grails.project.dependency.resolution = {
     dependencies {
 
         compile(
-                // Amazon Web Services programmatic interface
-                'com.amazonaws:aws-java-sdk:1.3.32',
+                // Ease of use library for Amazon Simple Workflow Service (SWF), e.g., WorkflowClientFactory
+                'com.netflix.glisten:glisten:0.3',
         ) {
-            // AWS defines their dependencies as open-ended, which causes problems when resolving.
-            // See http://stackoverflow.com/a/7990573/869
+            // If Glisten is using a different AWS Java SDK we don't want to pick up the transitive dep by accident.
             transitive = false
         }
 
         compile(
-                // Transitive dependencies of aws-java-sdk, but also used directly.
-                // It would be great if we could upgrade httpcore and httpclient, but we can't until the AWS Java SDK
-                // upgrades its dependencies. If we simply upgrade these, then some Amazon calls fail.
-                'org.apache.httpcomponents:httpcore:4.1',
-                'org.apache.httpcomponents:httpclient:4.1.1',
+                // Amazon Web Services programmatic interface. Transitive dependency of glisten, but also used directly.
+                'com.amazonaws:aws-java-sdk:1.6.6',
 
-                // Explicitly including aws-java-sdk transitive dependencies
-                'org.codehaus.jackson:jackson-core-asl:1.8.9',
-                'org.codehaus.jackson:jackson-mapper-asl:1.8.9',
+                // Transitive dependencies of aws-java-sdk, but also used for REST calls, e.g., HttpClient
+                'org.apache.httpcomponents:httpcore:4.2',
+                'org.apache.httpcomponents:httpclient:4.2.3',
 
-                // Extra collection types and utilities
+                // Transitive dependency of aws-java-sdk, but also used for JSON marshalling, e.g., JsonProperty
+                'com.fasterxml.jackson.core:jackson-core:2.1.1',
+                'com.fasterxml.jackson.core:jackson-annotations:2.1.1',
+
+                // Extra collection types and utilities, e.g., Bag
                 'commons-collections:commons-collections:3.2.1',
 
-                // Easier Java from of the Apache Foundation
+                // Easier Java from of the Apache Foundation, e.g., WordUtils, DateUtils, StringUtils
                 'commons-lang:commons-lang:2.4',
 
-                // Easier Java from Joshua Bloch and Google
+                // Easier Java from Joshua Bloch and Google, e.g., Multiset, ImmutableSet, Maps, Table, Splitter
                 'com.google.guava:guava:12.0',
 
-                // SSH calls to retrieve secret keys from remote servers
+                // SSH calls to retrieve secret keys from remote servers, e.g., JSch, ChammelExec
                 'com.jcraft:jsch:0.1.45',
 
                 // Send emails about system errors and task completions
-                'javax.mail:mail:1.4.1',
+                'javax.mail:mail:1.4.3',
 
-                // Better date API
+                // Better date API, e.g., DateTime
                 'joda-time:joda-time:1.6.2',
-
-                // Delete when Amazon provides a proper instance type API. Web scraping API to parse poorly formed HTML.
-                'org.jsoup:jsoup:1.6.1',
 
                 // Static analysis for Groovy code.
                 'org.codenarc:CodeNarc:0.19',
@@ -130,13 +129,10 @@ grails.project.dependency.resolution = {
                 // Call Perforce in process. Delete when user data no longer come from Perforce at deployment time.
                 'com.perforce:p4java:2010.1.269249',
 
-                // Rules for AWS named objects.
+                // Rules for AWS named objects, e.g., Names, AppVersion
                 'com.netflix.frigga:frigga:0.6',
 
-                // Ease of use library for AWS SWF.
-                'com.netflix.glisten:glisten:0.2',
-
-                // Groovy concurrency framework.
+                // Groovy concurrency framework, e.g., GParsExecutorsPool, Dataflow, Promise
                 'org.codehaus.gpars:gpars:1.0.0',
 
                 // Used for JSON parsing of AWS Simple Workflow Service metadata.
@@ -158,6 +154,11 @@ grails.project.dependency.resolution = {
 
         // Optional dependency for Spock to support mocking objects without a parameterless constructor.
         test 'org.objenesis:objenesis:1.2'
+
+        test "org.seleniumhq.selenium:selenium-support:2.35.0"
+        test "org.seleniumhq.selenium:selenium-chrome-driver:2.35.0"
+        test "org.gebish:geb-spock:0.9.2"
+
     }
 
     plugins {
@@ -175,6 +176,7 @@ grails.project.dependency.resolution = {
         }
 
         test ':code-coverage:1.2.5'
+        test ':geb:0.9.2'
 
         build ":tomcat:$grailsVersion"
     }

@@ -39,6 +39,7 @@ import com.netflix.asgard.model.AutoScalingGroupMixin
 import com.netflix.asgard.model.AutoScalingProcessType
 import com.netflix.asgard.model.EurekaStatus
 import com.netflix.asgard.model.InstanceHealth
+import com.netflix.asgard.model.InstanceStateData
 import com.netflix.asgard.model.StackAsg
 import com.netflix.asgard.model.Subnets
 import com.netflix.frigga.ami.AppVersion
@@ -267,38 +268,37 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
                 autoScalingGroupName: 'service1-int-v008', minSize: 1, desiredCapacity: 2, maxSize: 3))
     }
 
-
-    def 'should determine healthy ASG due to no instances'() {
+    def 'should determine operational ASG due to no instances'() {
         awsAutoScalingService = Spy(AwsAutoScalingService)
 
         expect:
-        null == awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 0)
+        !awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 0)
     }
 
-    def 'should fail health check for missing ASG'() {
+    def 'should fail operational check for missing ASG'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> null
         }
 
         when:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1)
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1)
 
         then:
         IllegalStateException e = thrown()
         e.message == "ASG 'service1-int-v008' does not exist."
     }
 
-    def 'should determine unhealthy ASG due to instance count'() {
+    def 'should determine not operational ASG due to instance count'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: []) }
         }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
                 'Instance count is 0. Waiting for 1.'
     }
 
-    def 'should determine unhealthy ASG due to instances not yet in service'() {
+    def 'should determine not operational ASG due to instances not yet in service'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
                     new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.Pending.name()) ])
@@ -306,11 +306,11 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
         }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
                 'Waiting for instances to be in service.'
     }
 
-    def 'should determine unhealthy ASG due to unavailable Eureka data'() {
+    def 'should determine not operational ASG due to unavailable Eureka data'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
                     new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ])
@@ -319,13 +319,16 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
         awsAutoScalingService.discoveryService = Mock(DiscoveryService) {
             getAppInstancesByIds(_, _) >> []
         }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
                 'Waiting for Eureka data about instances.'
     }
 
-    def 'should determine unhealthy ASG due to instances not up in Eureka'() {
+    def 'should determine not operational ASG due to instances not up in Eureka'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
                     new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ])
@@ -337,13 +340,16 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
                 it
             }]
         }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
                 'Waiting for all instances to be available in Eureka.'
     }
 
-    def 'should determine unhealthy ASG due to failed instance health check'() {
+    def 'should determine not operational ASG due to failed instance health check'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
                     new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ])
@@ -363,13 +369,16 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
         awsAutoScalingService.awsEc2Service = Mock(AwsEc2Service) {
             checkHostsHealth(_) >> false
         }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
                 'Waiting for all instances to pass health checks.'
     }
 
-    def 'should determine healthy ASG'() {
+    def 'should determine operational ASG without load balancer'() {
         awsAutoScalingService = Spy(AwsAutoScalingService) {
             getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
                     new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ])
@@ -384,9 +393,95 @@ scheduled actions #scheduleNames and suspended processes #processNames""")
         awsAutoScalingService.awsEc2Service = Mock(AwsEc2Service) {
             checkHostsHealth(_) >> true
         }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
 
         expect:
-        awsAutoScalingService.reasonAsgIsUnhealthy(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) == null
+        !awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1)
+    }
+
+    def 'should determine unhealthy ASG with load balancer and out of service instance'() {
+        awsAutoScalingService = Spy(AwsAutoScalingService) {
+            getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
+                    new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ],
+                    loadBalancerNames: ['loadBalancer1'])
+            }
+        }
+        awsAutoScalingService.discoveryService = Mock(DiscoveryService) {
+            getAppInstancesByIds(_, _) >> [ new ApplicationInstance().with {
+                status = EurekaStatus.UP.name()
+                it
+            }]
+        }
+        awsAutoScalingService.awsEc2Service = Mock(AwsEc2Service) {
+            checkHostsHealth(_) >> true
+        }
+        awsAutoScalingService.awsLoadBalancerService = Mock(AwsLoadBalancerService) {
+            getInstanceStateDatas(_, 'loadBalancer1', _) >> [new InstanceStateData(state: 'InService',
+                    autoScalingGroupName: 'service1-int-v008'), new InstanceStateData(state: 'OutOfService',
+                    autoScalingGroupName: 'service1-int-v008')]
+        }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
+
+        expect:
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) ==
+                'Waiting for all instances to pass ELB health checks.'
+    }
+
+    def 'should determine healthy ASG with load balancer'() {
+        awsAutoScalingService = Spy(AwsAutoScalingService) {
+            getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
+                    new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ],
+                    loadBalancerNames: ['loadBalancer1'])
+            }
+        }
+        awsAutoScalingService.discoveryService = Mock(DiscoveryService) {
+            getAppInstancesByIds(_, _) >> [ new ApplicationInstance().with {
+                status = EurekaStatus.UP.name()
+                it
+            }]
+        }
+        awsAutoScalingService.awsEc2Service = Mock(AwsEc2Service) {
+            checkHostsHealth(_) >> true
+        }
+        awsAutoScalingService.awsLoadBalancerService = Mock(AwsLoadBalancerService) {
+            getInstanceStateDatas(_, 'loadBalancer1', _) >> [new InstanceStateData(state: 'InService',
+                    autoScalingGroupName: 'service1-int-v008'), new InstanceStateData(state: 'OutOfService',
+                    autoScalingGroupName: 'service1-int-v007')]
+        }
+        awsAutoScalingService.configService = Mock(ConfigService) {
+            getRegionalDiscoveryServer(_) >> 'eureka_url'
+        }
+
+        expect:
+        awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1), 'service1-int-v008', 1) == ''
+    }
+
+    def 'should determine healthy ASG when Eureka is not configured'() {
+        awsAutoScalingService = Spy(AwsAutoScalingService) {
+            getAutoScalingGroup(_, _) >> { new AutoScalingGroup(autoScalingGroupName: it[1], instances: [
+                    new Instance(instanceId: 'i-f00dcafe', lifecycleState: LifecycleState.InService.name()) ],
+                    loadBalancerNames: ['loadBalancer1'])
+            }
+        }
+        awsAutoScalingService.awsLoadBalancerService = Mock(AwsLoadBalancerService) {
+            getInstanceStateDatas(_, 'loadBalancer1', _) >> [new InstanceStateData(state: 'InService',
+                    autoScalingGroupName: 'service1-int-v008'), new InstanceStateData(state: 'OutOfService',
+                    autoScalingGroupName: 'service1-int-v007')]
+        }
+        awsAutoScalingService.configService = Mock(ConfigService)
+
+        when:
+        String reason = awsAutoScalingService.reasonAsgIsNotOperational(UserContext.auto(Region.US_WEST_1),
+                'service1-int-v008', 1)
+
+        then:
+        reason == ''
+        0 * awsAutoScalingService.discoveryService
+        1 * awsAutoScalingService.configService.getRegionalDiscoveryServer(_)
     }
 
     def 'should update ASG and change everything'() {

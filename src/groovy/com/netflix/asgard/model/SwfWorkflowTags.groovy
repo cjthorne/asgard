@@ -15,8 +15,6 @@
  */
 package com.netflix.asgard.model
 
-import com.amazonaws.services.simpleworkflow.flow.DataConverter
-import com.amazonaws.services.simpleworkflow.flow.JsonDataConverter
 import com.netflix.asgard.Link
 import com.netflix.asgard.UserContext
 import com.netflix.glisten.WorkflowTags
@@ -36,26 +34,4 @@ class SwfWorkflowTags extends WorkflowTags {
 
     /** A UserContext that corresponds to the workflow for use in constructing an Asgard Task */
     UserContext user
-
-    /**
-     * @return tags based on the properties of this class that can be used in an SWF workflow
-     * TODO remove this once constructTag has been moved to WorkflowTags
-     */
-    @Override
-    List<String> constructTags() {
-        Map<String, Object> allPropertiesWithValues = properties
-        Map<String, Object> propertiesWithValues = allPropertiesWithValues.findAll { it.value != null }
-        List<String> propertyNames = propertiesWithValues.keySet().sort() - propertyNamesToIgnore
-        propertyNames.collect { constructTag(it) }
-    }
-
-    /**
-     * @return constructs a single tag value
-     * TODO put this in WorkflowTags
-     */
-    String constructTag(String propertyName) {
-        DataConverter dataConverter = new JsonDataConverter()
-        String data = dataConverter.toData(this."${propertyName}")
-        "{\"${propertyName}\":${data}}"
-    }
 }

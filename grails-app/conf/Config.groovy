@@ -13,10 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 import com.netflix.asgard.model.HardwareProfile
 import com.netflix.asgard.model.InstanceTypeData
 import org.apache.log4j.DailyRollingFileAppender
 import com.netflix.asgard.Region
+
 
 // http://grails.org/doc/latest/guide/3.%20Configuration.html#3.1.2 Logging
 log4j = {
@@ -65,10 +67,8 @@ log4j = {
 
     // Suppress most noise from libraries
     error 'com.amazonaws', 'grails.spring', 'net.sf.ehcache', 'org.springframework', 'org.hibernate',
-            'org.apache.catalina', 'org.apache.commons', 'org.apache.coyote', 'org.apache.jasper', 'org.apache.tomcat',
-            'org.codehaus.groovy.grails'
-	
-	// TODO: disable this until RightScale fixes the fact that they send back an empty SetCookie header
+            'org.apache.catalina', 'org.apache.commons', 'org.apache.coyote', 'org.apache.http.client.protocol',
+            'org.apache.jasper', 'org.apache.tomcat', 'org.codehaus.groovy.grails'
 	error 'org.apache.http.client.protocol'
 
     environments {
@@ -139,27 +139,6 @@ cloud {
 
     throttleMillis = 400
 
-    // TODO: Delete these instance type hacks when they are in the AWS Java SDK enum instead
-    customInstanceTypes = [
-            new InstanceTypeData(linuxOnDemandPrice: 0.580, hardwareProfile:
-                    new HardwareProfile(instanceType: 'm3.xlarge', architecture: '64-bit',
-                            cpu: '13 EC2 Compute Units (4 virtual cores with 3.25 EC2 Compute Units each)',
-                            description: 'M3 Extra Large Instance',
-                            ioPerformance: 'Moderate', memory: '15 GiB',
-                            storage: 'EBS storage only')),
-            new InstanceTypeData(linuxOnDemandPrice: 1.160, hardwareProfile:
-                    new HardwareProfile(instanceType: 'm3.2xlarge', architecture: '64-bit',
-                            cpu: '26 EC2 Compute Units (8 virtual cores with 3.25 EC2 Compute Units each)',
-                            description: 'M3 Double Extra Large Instance',
-                            ioPerformance: 'High', memory: '30 GiB',
-                            storage: 'EBS storage only')),
-            new InstanceTypeData(linuxOnDemandPrice: 3.50, hardwareProfile:
-                    new HardwareProfile(instanceType: 'cr1.8xlarge', architecture: '64-bit',
-                            cpu: '88 EC2 Compute Units (2 x Intel Xeon E5-2670, eight-core)',
-                            description: 'Cluster High Memory',
-                            ioPerformance: '10 Gbps Ethernet', memory: '244 GiB',
-                            storage: '240 GiB instance 64-bit storage (2 x 120 GiB SSD)')),
-    ]
     spot.infoUrl = 'http://aws.amazon.com/ec2/spot-instances/'
 }
 
@@ -198,14 +177,20 @@ server {
 environments {
     development {
         server.online = !System.getProperty('offline')
-        if (!server.online) { println 'Config: working offline' }
+        if (!server.online) {
+            println 'Config: working offline'
+        }
         plugin {
             refreshDelay = 5000
         }
         workflow.taskList = "asgard_${System.getProperty('user.name')}"
     }
     test {
-        server.online = false
+        if (System.getProperty('regressionSuite') == 'true') {
+            server.online = true
+        } else {
+            server.online = false
+        }
     }
     production {
         cloud {

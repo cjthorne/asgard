@@ -27,7 +27,7 @@ class QueueController {
 
     def allowedMethods = [save: 'POST', update: 'POST', delete: 'POST']
 
-    def index = { redirect(action: 'list', params:params) }
+    def index = { redirect(action: 'list', params: params) }
 
     def list = {
         UserContext userContext = UserContext.of(request)
@@ -52,7 +52,7 @@ class QueueController {
         try {
             awsSqsService.createQueue(userContext, queueName, visibilityTimeout, delay)
             flash.message = "Queue '${queueName}' has been created."
-            redirect(action: 'show', params:[id:queueName])
+            redirect(action: 'show', params: [id: queueName])
         } catch (Exception e) {
             flash.message = "Could not create Queue: ${e}"
             redirect(action: 'list')
@@ -98,13 +98,14 @@ class QueueController {
         String queueName = params.name
         Integer visibilityTimeout = params.visibilityTimeout as Integer
         Integer delay = params.delay as Integer
+        Integer retention = params.retention as Integer
         UserContext userContext = UserContext.of(request)
         try {
-            awsSqsService.updateQueue(userContext, queueName, visibilityTimeout, delay)
+            awsSqsService.updateQueue(userContext, queueName, visibilityTimeout, delay, retention)
             flash.message = "Queue '${queueName}' has been updated."
         } catch (Exception e) {
             flash.message = "Failed to update Queue '${queueName}': ${e}"
         }
-        redirect(action: 'show', params:[id:queueName])
+        redirect(action: 'show', params: [id: queueName])
     }
 }

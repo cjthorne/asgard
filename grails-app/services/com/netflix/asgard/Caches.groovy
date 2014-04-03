@@ -36,6 +36,7 @@ import com.amazonaws.services.elasticloadbalancing.model.SourceSecurityGroup
 import com.amazonaws.services.rds.model.DBInstance
 import com.amazonaws.services.rds.model.DBSecurityGroup
 import com.amazonaws.services.rds.model.DBSnapshot
+import com.amazonaws.services.route53.model.HostedZone
 import com.amazonaws.services.simpleworkflow.model.ActivityTypeInfo
 import com.amazonaws.services.simpleworkflow.model.DomainInfo
 import com.amazonaws.services.simpleworkflow.model.WorkflowExecutionInfo
@@ -62,6 +63,7 @@ class Caches {
     final CachedMap<AppRegistration> allApplications
     final CachedMap<MetricId> allCustomMetrics
     final CachedMap<HardwareProfile> allHardwareProfiles
+    final CachedMap<HostedZone> allHostedZones
     final CachedMap<String> allTerminationPolicyTypes
     final CachedMap<WorkflowTypeInfo> allWorkflowTypes
     final CachedMap<DomainInfo> allWorkflowDomains
@@ -96,10 +98,7 @@ class Caches {
     final MultiRegionCachedMap<TopicData> allTopics
     final MultiRegionCachedMap<Volume> allVolumes
     final MultiRegionCachedMap<Vpc> allVpcs
-
     final MultiRegionInstancePrices allOnDemandPrices
-    final MultiRegionInstancePrices allReservedPrices
-    final MultiRegionInstancePrices allSpotPrices
 
     Caches(CachedMapBuilder cachedMapBuilder, ConfigService configService = null) {
 
@@ -141,12 +140,11 @@ class Caches {
         allCustomMetrics = cachedMapBuilder.of(EntityType.metric, 120).buildCachedMap()
         allWorkflowTypes = cachedMapBuilder.of(EntityType.workflowType, 120).buildCachedMap()
         allWorkflowDomains = cachedMapBuilder.of(EntityType.workflowDomain, 3600).buildCachedMap()
+        allHostedZones = cachedMapBuilder.of(EntityType.hostedZone, 120).buildCachedMap()
 
         // Use one thread for all instance type and pricing caches. None of these need updating more than once an hour.
         allHardwareProfiles = cachedMapBuilder.of(EntityType.hardwareProfile, 3600).buildCachedMap()
         allOnDemandPrices = MultiRegionInstancePrices.create('On Demand Prices')
-        allReservedPrices = MultiRegionInstancePrices.create('Reserved Prices')
-        allSpotPrices = MultiRegionInstancePrices.create('Spot Prices')
         allInstanceTypes = cachedMapBuilder.of(EntityType.instanceType).buildMultiRegionCachedMap()
         allTerminationPolicyTypes = cachedMapBuilder.of(EntityType.terminationPolicyType, 3600).buildCachedMap()
     }

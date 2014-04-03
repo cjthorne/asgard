@@ -15,7 +15,6 @@
  */
 package com.netflix.asgard
 
-import com.netflix.asgard.format.JsonpStripper
 import grails.converters.JSON
 import grails.converters.XML
 import groovy.util.slurpersupport.GPathResult
@@ -26,18 +25,21 @@ import org.apache.http.HttpHost
 import org.apache.http.HttpResponse
 import org.apache.http.auth.AuthScope
 import org.apache.http.auth.UsernamePasswordCredentials
+import org.apache.http.NameValuePair
+import org.apache.http.client.HttpClient
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.apache.http.client.methods.HttpDelete
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.client.methods.HttpPost
 import org.apache.http.client.methods.HttpPut
 import org.apache.http.client.methods.HttpUriRequest
-import org.apache.http.conn.params.ConnManagerPNames
+import org.apache.http.client.params.ClientPNames
 import org.apache.http.conn.params.ConnRoutePNames
 import org.apache.http.entity.StringEntity
+import org.apache.http.impl.client.AutoRetryHttpClient
 import org.apache.http.impl.client.DefaultHttpClient
-import org.apache.http.impl.client.DefaultHttpRequestRetryHandler
-import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager
+import org.apache.http.impl.client.DefaultServiceUnavailableRetryStrategy
+import org.apache.http.impl.conn.PoolingClientConnectionManager
 import org.apache.http.message.BasicNameValuePair
 import org.apache.http.params.HttpConnectionParams
 import org.apache.http.util.EntityUtils
@@ -52,33 +54,23 @@ class RestClientService implements InitializingBean {
 
     def configService
 
-    // Change to PoolingClientConnectionManager after upgrade to http-client 4.2.
-    final ThreadSafeClientConnManager connectionManager = new ThreadSafeClientConnManager()
-    final DefaultHttpClient httpClient = new DefaultHttpClient(connectionManager)
-
+    final PoolingClientConnectionManager connectionManager = new PoolingClientConnectionManager()
+    HttpClient httpClient
 
     public void afterPropertiesSet() throws Exception {
+        HttpClient baseClient = new DefaultHttpClient(connectionManager)
+        httpClient = new AutoRetryHttpClient(baseClient, new DefaultServiceUnavailableRetryStrategy())
         if (configService.proxyHost) {
             final HttpHost proxy = new HttpHost(configService.proxyHost, configService.proxyPort, 'http')
             httpClient.params.setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy)
         }
-        // Switch to ClientPNames.CONN_MANAGER_TIMEOUT when upgrading http-client 4.2
-        httpClient.params.setLongParameter(ConnManagerPNames.TIMEOUT, configService.httpConnPoolTimeout)
-
-        // This retry handler only retries in a few specific failure cases, but it's better than nothing.
-        httpClient.setHttpRequestRetryHandler(new DefaultHttpRequestRetryHandler(3, true))
-        // If the AWS Java SDK upgrades to httpclient 4.2.* then here's the new way to set up the client with retries.
-        /*
-        PoolingClientConnectionManager connectionManager = new PoolingClientConnectionManager()
-        HttpClient baseClient = new DefaultHttpClient(connectionManager)
-        HttpClient httpClient = new AutoRetryHttpClient(baseClient, new DefaultServiceUnavailableRetryStrategy())
-        */
+        httpClient.params.setLongParameter(ClientPNames.CONN_MANAGER_TIMEOUT, configService.httpConnPoolTimeout)
 
         avoidLongCachingOfDnsResults()
         connectionManager.maxTotal = configService.httpConnPoolMaxSize
         connectionManager.defaultMaxPerRoute = configService.httpConnPoolMaxForRoute
 		
-		httpClient.getCredentialsProvider().setCredentials(
+		baseClient.getCredentialsProvider().setCredentials(
 			new AuthScope("api.softlayer.com", 443),
 			new UsernamePasswordCredentials(configService.getSoftLayerAPIUsername(), configService.getSoftLayerAPIAccessKey())
 		)
@@ -113,7 +105,7 @@ class RestClientService implements InitializingBean {
             String content = get(uri, 'application/json; charset=UTF-8', timeoutMillis)
 
             // Strip JSONP padding if needed.
-            return content ? JSON.parse(new JsonpStripper(content).stripPadding()) : null
+            return content ? JSON.parse(content) : null
         } catch (Exception e) {
             log.error "GET from ${uri} failed: ${e}"
             return null
@@ -177,6 +169,27 @@ class RestClientService implements InitializingBean {
         } finally {
             // Save memory per http://stackoverflow.com/questions/4999708/httpclient-memory-management
             connectionManager.closeIdleConnections(60, TimeUnit.SECONDS)
+        }
+    }
+
+    /**
+     * Posts to the URI with a Map of name-value pairs.
+     *
+     * @param uriPath the remote destination
+     * @param nameValuePairs the name-value pairs to pass in the post body
+     * @return int the HTTP response code
+     */
+    RestResponse postAsNameValuePairs(String uriPath, Map<String, String> nameValuePairs) {
+        HttpPost httpPost = new HttpPost(uriPath)
+        if (nameValuePairs) {
+            List<NameValuePair> data = nameValuePairs.collect { new BasicNameValuePair(it.key, it.value) }
+            httpPost.setEntity(new UrlEncodedFormEntity(data))
+        }
+        executeAndProcessResponse(httpPost) {
+            logErrors(httpPost, it)
+            int statusCode = it.statusLine.statusCode
+            String content = it.entity.content.getText()
+            new RestResponse(statusCode, content)
         }
     }
 

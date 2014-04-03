@@ -28,6 +28,7 @@ import com.netflix.asgard.model.WorkflowExecutionBeanOptions
 import com.netflix.asgard.retriever.AwsResultsRetriever
 import spock.lang.Specification
 
+@SuppressWarnings(["GroovyAssignabilityCheck", "GroovyAccessibility"])
 class AwsSimpleWorkflowServiceUnitSpec extends Specification {
 
     AwsSimpleWorkflowService awsSimpleWorkflowService = new AwsSimpleWorkflowService()
@@ -51,7 +52,7 @@ class AwsSimpleWorkflowServiceUnitSpec extends Specification {
         awsSimpleWorkflowService.simpleWorkflowClient = Mock(AmazonSimpleWorkflow)
 
         when:
-        List<DomainInfo> domains = awsSimpleWorkflowService.retrieveDomains()
+        List<DomainInfo> domains = awsSimpleWorkflowService.retrieveDomainsAndEnsureDomainIsRegistered()
 
         then:
         domains == [new DomainInfo(name: 'domain1')]
@@ -69,7 +70,7 @@ class AwsSimpleWorkflowServiceUnitSpec extends Specification {
         awsSimpleWorkflowService.simpleWorkflowClient = Mock(AmazonSimpleWorkflow)
 
         when:
-        awsSimpleWorkflowService.retrieveDomains()
+        awsSimpleWorkflowService.retrieveDomainsAndEnsureDomainIsRegistered()
 
         then:
         1 * awsSimpleWorkflowService.simpleWorkflowClient.registerDomain(_)
@@ -105,10 +106,11 @@ class AwsSimpleWorkflowServiceUnitSpec extends Specification {
         options == null
     }
 
-    def 'should prefer closed workflow execution info by task ID'() {
+    def 'should prefer closed workflow execution info by task ID if also found as open'() {
         def matchRequest = { it.domain == 'Westeros' && it.tagFilter == new TagFilter(tag: '{"id":"123"}') }
         awsSimpleWorkflowService.simpleWorkflowClient = Mock(AmazonSimpleWorkflow) {
-            1 * listOpenWorkflowExecutions({ matchRequest(it) }) >> new WorkflowExecutionInfos(executionInfos: [
+            // Open executions may not be searched since a closed execution is found (due to concurrency).
+            (0..1) * listOpenWorkflowExecutions({ matchRequest(it) }) >> new WorkflowExecutionInfos(executionInfos: [
                     new WorkflowExecutionInfo(execution: new WorkflowExecution(workflowId: 'abc', runId: 'def'),
                             executionStatus: 'OPEN')
             ])

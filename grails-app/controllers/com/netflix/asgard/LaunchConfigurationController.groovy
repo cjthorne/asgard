@@ -34,9 +34,9 @@ class LaunchConfigurationController {
     def flagService
     def instanceTypeService
 
-    static allowedMethods = [delete:'POST', save:'POST', update:'POST', cleanup: 'POST', massDelete: 'POST']
+    static allowedMethods = [delete: 'POST', save: 'POST', update: 'POST', cleanup: 'POST', massDelete: 'POST']
 
-    def index = { redirect(action: 'list', params:params) }
+    def index = { redirect(action: 'list', params: params) }
 
     def list = {
         UserContext userContext = UserContext.of(request)
@@ -126,16 +126,6 @@ class LaunchConfigurationController {
     }
 
     def massDelete = {
-        UserContext userContext = UserContext.of(request)
-        Integer daysAgo = params.daysAgo as Integer
-        String message = doMassDelete(userContext, daysAgo)
-        render "<pre>${message}</pre>"
-    }
-
-    // This is the old clean up endpoint. After a release, the Jenkins job can be changed to point to massDelete. Then
-    // this method can be deleted.
-    @Deprecated
-    def cleanup = {
         UserContext userContext = UserContext.of(request)
         Integer daysAgo = params.daysAgo as Integer
         String message = doMassDelete(userContext, daysAgo)

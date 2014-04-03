@@ -106,7 +106,6 @@ class LoadBalancerController {
         Collection<String> selectedZones = awsEc2Service.preselectedZoneNames(availabilityZones,
                 Requests.ensureList(params.selectedZones))
         Subnets subnets = awsEc2Service.getSubnets(userContext)
-        Map<String, String> purposeToVpcId = subnets.mapPurposeToVpcId()
         [
             applications: applicationService.getRegisteredApplicationsForLoadBalancer(userContext),
             stacks: stackService.getStacks(userContext),
@@ -114,8 +113,8 @@ class LoadBalancerController {
             subnetPurposes: subnets.getPurposesForZones(availabilityZones*.zoneName, SubnetTarget.ELB).sort(),
             zonesGroupedByPurpose: subnets.groupZonesByPurpose(availabilityZones*.zoneName, SubnetTarget.ELB),
             selectedZones: selectedZones,
-            purposeToVpcId: purposeToVpcId,
-            vpcId: purposeToVpcId[params.subnetPurpose],
+            purposeToVpcId: subnets.mapPurposeToVpcId(),
+            vpcId: subnets.getVpcIdForSubnetPurpose(params.subnetPurpose),
             securityGroupsGroupedByVpcId: securityGroupsGroupedByVpcId,
             selectedSecurityGroups: Requests.ensureList(params.selectedSecurityGroups),
         ]
@@ -150,7 +149,7 @@ class LoadBalancerController {
                         subnetPurpose)
                 updateHealthCheck(userContext, lbName, params)
                 flash.message = "Load Balancer '${lbName}' has been created. " + configService.postElbCreationMessage
-                redirect(action: 'show', params:[name:lbName])
+                redirect(action: 'show', params: [name: lbName])
             } catch (Exception e) {
                 flash.message = "Could not create Load Balancer: ${e}"
                 chain(action: 'create', model: [cmd: cmd], params: params)
@@ -216,7 +215,8 @@ class LoadBalancerController {
         LoadBalancerDescription lb = awsLoadBalancerService.getLoadBalancer(userContext, name)
 
         List<String> zoneList = Requests.ensureList(params.selectedZones)
-        if (lb.subnets) {
+        List<String> defaultVpcSubnetIds = awsEc2Service.getDefaultVpcSubnetIds(userContext)
+        if (lb.subnets.any { !(it in defaultVpcSubnetIds) }) {
             updateLbSubnets(userContext, name, zoneList, lb.subnets)
         } else {
             updateLbZones(userContext, name, zoneList, lb.availabilityZones)
@@ -257,7 +257,7 @@ class LoadBalancerController {
 
     def addListener = { AddListenerCommand cmd ->
         if (cmd.hasErrors()) {
-            chain(action: 'prepareListener', model: [cmd:cmd], params: params)
+            chain(action: 'prepareListener', model: [cmd: cmd], params: params)
         } else {
             UserContext userContext = UserContext.of(request)
             Listener listener = new Listener(protocol: cmd.protocol, loadBalancerPort: cmd.lbPort,

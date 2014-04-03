@@ -22,11 +22,9 @@ import com.amazonaws.services.ec2.model.Instance
 import com.amazonaws.services.ec2.model.Reservation
 import com.amazonaws.services.ec2.model.Tag
 import com.amazonaws.services.elasticloadbalancing.model.LoadBalancerDescription
-import com.google.common.collect.Multiset
 import com.netflix.asgard.model.ApplicationInstance
 import com.netflix.asgard.text.TextLink
 import com.netflix.asgard.text.TextLinkTemplate
-import com.netflix.frigga.ami.AppVersion
 import com.netflix.grails.contextParam.ContextParam
 import grails.converters.JSON
 import grails.converters.XML
@@ -34,11 +32,12 @@ import grails.converters.XML
 @ContextParam('region')
 class InstanceController {
 
-    final static allowedMethods = [terminate: 'POST', terminateAndShrinkGroup: 'POST']
+    final static allowedMethods = ['terminate', 'terminateAndShrinkGroup', 'reboot', 'deregister', 'register',
+            'associateDo', 'takeOutOfService', 'putInService', 'addTag', 'removeTag'].collectEntries { [(it): 'POST'] }
 
     static editActions = ['associate']
 
-    def index = { redirect(action: 'list', params:params) }
+    def index = { redirect(action: 'list', params: params) }
 
     def awsAutoScalingService
     def awsEc2Service
@@ -47,11 +46,31 @@ class InstanceController {
     def discoveryService
     def mergedInstanceGroupingService
 
+    /**
+     * The special marker for looking for items that do not have an application.
+     */
+    static final String NO_APP_ID = '_noapp'
+
+    def apps = {
+        UserContext userContext = UserContext.of(request)
+        List<MergedInstance> allInstances = mergedInstanceGroupingService.getMergedInstances(userContext)
+        List<String> appNames = allInstances.findResults { it.appName?.toLowerCase() ?: null } as List<String>
+        Map result = [appNames: appNames.unique().sort(), noAppId: NO_APP_ID]
+        withFormat {
+            html { result }
+            xml { new XML(result).render(response) }
+            json { new JSON(result).render(response) }
+        }
+    }
+
     def list = {
         UserContext userContext = UserContext.of(request)
         List<MergedInstance> instances = []
         Set<String> appNames = Requests.ensureList(params.id).collect { it.split(',') }.flatten() as Set<String>
-        if (appNames) {
+        if (appNames.contains(NO_APP_ID)) {
+            instances = mergedInstanceGroupingService.getMergedInstances(userContext).findAll { !it.appName }
+        }
+        else if (appNames) {
             instances = appNames.collect { mergedInstanceGroupingService.getMergedInstances(userContext, it) }.flatten()
         } else {
             instances = mergedInstanceGroupingService.getMergedInstances(userContext)
@@ -78,27 +97,6 @@ class InstanceController {
             html { render(view: 'list', model: ['instanceList' : matchingMergedInstances]) }
             xml { new XML(matchingMergedInstances).render(response) }
             json { new JSON(matchingMergedInstances).render(response) }
-        }
-    }
-
-    def appversions = {
-        UserContext userContext = UserContext.of(request)
-        Set<Multiset.Entry<AppVersion>> avs = awsEc2Service.getCountedAppVersions(userContext).entrySet()
-        withFormat {
-            xml {
-                render() {
-                    apps(count: avs.size()) {
-                        avs.each { Multiset.Entry<AppVersion> entry ->
-                            app(name: entry.element.packageName,
-                                version: entry.element.version,
-                                count: entry.count,
-                                cl: entry.element.commit,
-                                buildJob: entry.element.buildJobName,
-                                buildNum: entry.element.buildNumber)
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -260,7 +258,7 @@ class InstanceController {
         awsEc2Service.rebootInstance(userContext, instanceId)
 
         flash.message = "Rebooting instance '${instanceId}'."
-        redirect(action: 'show', params:[instanceId:instanceId])
+        redirect(action: 'show', params: [instanceId: instanceId])
     }
 
     def raw = {
@@ -368,7 +366,7 @@ class InstanceController {
         } catch (Exception e) {
             flash.message = "Could not associate Elastic IP '${publicIp}' with '${instanceId}': ${e}"
         }
-        redirect(action: 'show', params:[instanceId:instanceId])
+        redirect(action: 'show', params: [instanceId: instanceId])
     }
 
     def takeOutOfService = {
@@ -393,14 +391,14 @@ class InstanceController {
         String instanceId = EntityType.instance.ensurePrefix(params.instanceId)
         UserContext userContext = UserContext.of(request)
         awsEc2Service.createInstanceTag(userContext, [instanceId], params.name, params.value)
-        redirect(action: 'show', params:[instanceId:instanceId])
+        redirect(action: 'show', params: [instanceId: instanceId])
     }
 
     def removeTag = {
         String instanceId = EntityType.instance.ensurePrefix(params.instanceId)
         UserContext userContext = UserContext.of(request)
         awsEc2Service.deleteInstanceTag(userContext, instanceId, params.name)
-        redirect(action: 'show', params:[instanceId:instanceId])
+        redirect(action: 'show', params: [instanceId: instanceId])
     }
 
     def userData = {

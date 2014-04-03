@@ -766,4 +766,11 @@ class ConfigService {
     String getFastPropertiesConsoleUrl() {
         grailsApplication.config.platform?.fastPropertyConsoleUrls?."${accountName}" ?: ""
     }
+
+    /**
+     * @return the ASG analyzer base url
+     */
+    String getAsgAnalyzerBaseUrl() {
+        grailsApplication.config.cloud?.asgAnalyzerBaseUrl ?: ''
+    }
 }
