@@ -286,9 +286,16 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 	}
 
 	private List<AutoScalingGroup> retrieveAllRightScaleArrays(Collection<String> names = null) {
-		JSONArray jsonArrays = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays?view=instance_detail')
+        JSONArray jsonArrays = restClientRightScaleService.getAsJson(
+            'https://us-4.rightscale.com/api/server_arrays?view=instance_detail');
+        
 		List<AutoScalingGroup> groups = []
 		jsonArrays.each {
+            if (getIdFromRelLinks(it.links, 'deployment') != configService.getRightScaleDeploymentId()) {
+                // only work with arrays in current deployment (dev vs. test vs. prod in RightScale)
+                return
+            }
+                
 			if (names != null) {
 				if (!names.find { name -> name == it.name }) {
 					return
@@ -346,7 +353,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 				availabilityZones: azNames
 			)
 			
-			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/server_arrays/' + arrayId + '/current_instances?view=extended')
+			JSONArray jsonInstances = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/server_arrays/' + arrayId + '/current_instances?view=extended')
 			List<Instance> instances = []
 			jsonInstances.each {
 				String instanceId = getIdFromRelLinks(it.links, 'self')
@@ -923,7 +930,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 			]
 			def List<List<String>> dcPolicy = getRightScaleDataCenterPolicy(groupTemplate.availabilityZones)
 			
-			def resp2 = restClientRightScaleService.post('https://my.rightscale.com/api/server_arrays', params + dcPolicy)
+			def resp2 = restClientRightScaleService.post('https://us-4.rightscale.com/api/server_arrays', params + dcPolicy)
 			log.debug resp2
 			suspendedProcesses.each {
 				suspendProcess(userContext, it, name, task)
@@ -1108,7 +1115,7 @@ class AwsAutoScalingService implements CacheInitializer, InitializingBean {
 					['server_array[state]', launchAndTerminateShouldBeDisabled ? 'disabled' : 'enabled']
 				] 
 
-				def resp2 = restClientRightScaleService.put('https://my.rightscale.com/api/server_arrays/' + serverid, params + dcPolicy)
+				def resp2 = restClientRightScaleService.put('https://us-4.rightscale.com/api/server_arrays/' + serverid, params + dcPolicy)
 				log.debug resp2
 			}
 			else {

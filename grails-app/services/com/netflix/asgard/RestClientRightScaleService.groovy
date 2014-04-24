@@ -105,7 +105,7 @@ class RestClientRightScaleService implements InitializingBean {
     }
 
 	def performLogin() {
-		def resp1 = post('https://my.rightscale.com/api/session', [
+		def resp1 = post('https://us-4.rightscale.com/api/session', [
 			email : configService.getRightScaleEmail(),
 			password: configService.getRightScalePassword(),
 			account_href : '/api/accounts/' + configService.getRightScaleAccountId()],

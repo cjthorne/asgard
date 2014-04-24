@@ -99,7 +99,7 @@ class InstanceTypeService implements CacheInitializer {
     }
 
     private List<InstanceTypeData> buildInstanceTypesRightscale() {
-        JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
+        JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
 
         def instanceData = []
         json.each { instancetype ->
