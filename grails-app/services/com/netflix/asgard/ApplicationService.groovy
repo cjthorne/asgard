@@ -15,17 +15,9 @@
  */
 package com.netflix.asgard
 
-import com.amazonaws.AmazonServiceException
-import com.amazonaws.services.simpledb.AmazonSimpleDB
-import com.amazonaws.services.simpledb.model.CreateDomainRequest
-import com.amazonaws.services.simpledb.model.DeleteAttributesRequest
-import com.amazonaws.services.simpledb.model.Item
-import com.amazonaws.services.simpledb.model.PutAttributesRequest
-import com.amazonaws.services.simpledb.model.ReplaceableAttribute
-import com.amazonaws.services.simpledb.model.SelectRequest
-import com.amazonaws.services.simpledb.model.SelectResult
 import com.netflix.asgard.cache.CacheInitializer
 import com.netflix.asgard.model.MonitorBucketType
+
 import org.joda.time.DateTime
 import org.springframework.beans.factory.InitializingBean
 
@@ -33,69 +25,29 @@ class ApplicationService implements CacheInitializer, InitializingBean {
 
     static transactional = false
 
-    /** The name of SimpleDB domain that stores the cloud application registry. */
-    private String domainName
-
     def grailsApplication  // injected after construction
     def awsAutoScalingService
-    def awsClientService
     def awsEc2Service
     def awsLoadBalancerService
     Caches caches
     def cloudReadyService
-    def configService
     def fastPropertyService
     def mergedInstanceGroupingService
     def taskService
+    def appDatabaseAmazonSimpleDBService
+    def appDatabaseCloudantService
+    def appDatabaseMongoService
+    AppDatabase appDatabase;
 
-    AmazonSimpleDB simpleDbClient
 
     void afterPropertiesSet() {
-        domainName = configService.applicationsDomain
-
-        // Applications are stored only in the default region, so no multi region support needed here.
-        simpleDbClient = simpleDbClient ?: awsClientService.create(AmazonSimpleDB)
+        //appDatabase = appDatabaseAmazonSimpleDBService
+        //appDatabase = appDatabaseCloudantService
+        appDatabase = appDatabaseMongoService
     }
 
     void initializeCaches() {
-        caches.allApplications.ensureSetUp({ retrieveApplications() })
-    }
-
-    String selectAllStatement() {
-        "select * from ${domainName} limit 2500"
-    }
-
-    String selectOneStatement() {
-        "select * from ${domainName} where itemName()="
-    }
-
-    private Collection<AppRegistration> retrieveApplications() {
-        List<Item> items = runQuery(selectAllStatement()).sort { it.name.toLowerCase() }
-        items.collect { AppRegistration.from(it) }
-    }
-
-    private List<Item> runQuery(String queryString) {
-        List<Item> appItems = []
-        try {
-            SelectResult result = simpleDbClient.select(new SelectRequest(queryString, true))
-            while (true) {
-                appItems.addAll(result.items)
-                String nextToken = result.nextToken
-                if (nextToken) {
-                    sleep 500
-                    result = simpleDbClient.select(new SelectRequest(queryString, true).withNextToken(nextToken))
-                } else {
-                    break
-                }
-            }
-        } catch (AmazonServiceException ase) {
-            if (ase.errorCode == 'NoSuchDomain') {
-                simpleDbClient.createDomain(new CreateDomainRequest(domainName))
-            } else {
-                throw ase
-            }
-        }
-        appItems
+        caches.allApplications.ensureSetUp({ appDatabase.getAllApplications().sort { it.name.toLowerCase() } } )
     }
 
     List<AppRegistration> getRegisteredApplications(UserContext userContext) {
@@ -114,10 +66,7 @@ class ApplicationService implements CacheInitializer, InitializingBean {
         if (from == From.CACHE) {
             return caches.allApplications.get(name)
         }
-        assert !(name.contains("'")) // Simple way to avoid SQL injection
-        String queryString = "${selectOneStatement()}'${name.toUpperCase()}'"
-        List<Item> items = runQuery(queryString)
-        AppRegistration appRegistration = AppRegistration.from(Check.loneOrNone(items, 'items'))
+        AppRegistration appRegistration = appDatabase.getApplication(name)
         caches.allApplications.put(name, appRegistration)
         appRegistration
     }
@@ -137,16 +86,12 @@ class ApplicationService implements CacheInitializer, InitializingBean {
             return result
         }
         String nowEpoch = new DateTime().millis as String
-        Collection<ReplaceableAttribute> attributes = buildAttributesList(group, type, description, owner, email,
-                monitorBucketType, false)
-        attributes << new ReplaceableAttribute('createTs', nowEpoch, false)
         String creationLogMessage = "Create registered app ${name}, type ${type}, owner ${owner}, email ${email}"
         taskService.runTask(userContext, creationLogMessage, { task ->
             try {
-                simpleDbClient.putAttributes(new PutAttributesRequest().withDomainName(domainName).
-                        withItemName(name.toUpperCase()).withAttributes(attributes))
+                appDatabase.createApplication(name, group, type, description, owner, email, monitorBucketType, nowEpoch, nowEpoch)
                 result.appCreated = true
-            } catch (AmazonServiceException e) {
+            } catch (Exception e) {
                 result.appCreateException = e
             }
             if (enableChaosMonkey) {
@@ -158,30 +103,12 @@ class ApplicationService implements CacheInitializer, InitializingBean {
         result
     }
 
-    private Collection<ReplaceableAttribute> buildAttributesList(String group, String type, String description,
-            String owner, String email, MonitorBucketType monitorBucketType, Boolean replaceExistingValues) {
-
-        Check.notNull(monitorBucketType, MonitorBucketType, 'monitorBucketType')
-        String nowEpoch = new DateTime().millis as String
-        Collection<ReplaceableAttribute> attributes = []
-        attributes << new ReplaceableAttribute('group', group ?: '', replaceExistingValues)
-        attributes << new ReplaceableAttribute('type', Check.notEmpty(type), replaceExistingValues)
-        attributes << new ReplaceableAttribute('description', Check.notEmpty(description), replaceExistingValues)
-        attributes << new ReplaceableAttribute('owner', Check.notEmpty(owner), replaceExistingValues)
-        attributes << new ReplaceableAttribute('email', Check.notEmpty(email), replaceExistingValues)
-        attributes << new ReplaceableAttribute('monitorBucketType', monitorBucketType.name(), replaceExistingValues)
-        attributes << new ReplaceableAttribute('updateTs', nowEpoch, replaceExistingValues)
-        return attributes
-    }
-
     void updateRegisteredApplication(UserContext userContext, String name, String group, String type, String desc,
                                      String owner, String email, MonitorBucketType bucketType) {
-        Collection<ReplaceableAttribute> attributes = buildAttributesList(group, type, desc, owner, email,
-                bucketType, true)
         taskService.runTask(userContext,
                 "Update registered app ${name}, type ${type}, owner ${owner}, email ${email}", { task ->
-            simpleDbClient.putAttributes(new PutAttributesRequest().withDomainName(domainName).
-                    withItemName(name.toUpperCase()).withAttributes(attributes))
+            // TODO: Why didn't the original update updateTs
+            appDatabase.updateApplication(name, group, type, desc, owner, email, bucketType, null)
         }, Link.to(EntityType.application, name))
         getRegisteredApplication(userContext, name)
     }
@@ -190,7 +117,7 @@ class ApplicationService implements CacheInitializer, InitializingBean {
         Check.notEmpty(name, "name")
         validateDelete(userContext, name)
         taskService.runTask(userContext, "Delete registered app ${name}", { task ->
-            simpleDbClient.deleteAttributes(new DeleteAttributesRequest(domainName, name.toUpperCase()))
+            appDatabase.deleteApplication(name)
         }, Link.to(EntityType.application, name))
         getRegisteredApplication(userContext, name)
     }

@@ -46,10 +46,14 @@ class InstanceTypeService implements CacheInitializer {
 
     void initializeCaches() {
         // Use one thread for all these data sources. None of these need updating more than once an hour.
-        caches.allOnDemandPrices.ensureSetUp({ retrieveInstanceTypeOnDemandPricing() })
+        if (!grailsApplication.config.noEC2) {
+            caches.allOnDemandPrices.ensureSetUp({ retrieveInstanceTypeOnDemandPricing() })
+        }
         caches.allInstanceTypes.ensureSetUp({ Region region -> buildInstanceTypes(region) })
         caches.allHardwareProfiles.ensureSetUp({ retrieveHardwareProfiles() }, {
-            caches.allOnDemandPrices.fill()
+            if (!grailsApplication.config.noEC2) {
+                caches.allOnDemandPrices.fill()
+            }
             caches.allInstanceTypes.fill()
         })
     }
@@ -99,7 +103,7 @@ class InstanceTypeService implements CacheInitializer {
     }
 
     private List<InstanceTypeData> buildInstanceTypesRightscale() {
-        JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
+        JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instance_types.json')
 
         def instanceData = []
         json.each { instancetype ->
@@ -122,7 +126,25 @@ class InstanceTypeService implements CacheInitializer {
         instanceData
     }
 
+    private List<InstanceTypeData> buildInstanceDockerLocal() {
+        HardwareProfile profile = new HardwareProfile(
+            instanceType : instancetype.description.replace('tempinstancetype'),
+            mem : '1024',
+            vCpu : '2.0*2',
+            storage : "-unknown-",
+            arch : "intel",
+        )
+        InstanceTypeData instanceTypeData = new InstanceTypeData(
+            hardwareProfile: profile,
+            linuxOnDemandPrice: 0.0,
+        )
+        return [instanceTypeData]
+    }
+
     private List<InstanceTypeData> buildInstanceTypes(Region region) {
+        if (region.code == Region.DOCKER_LOCAL_1) {
+            return buildInstanceTypesDockerLocal()
+        }
         if (region.code == Region.US_SOUTH_1_REGION_CODE) {
             return buildInstanceTypesRightscale()
         }
@@ -130,7 +152,7 @@ class InstanceTypeService implements CacheInitializer {
 
         Map<String, InstanceTypeData> namesToInstanceTypeDatas = [:]
         Set<InstanceType> enumInstanceTypes = InstanceType.values() as Set
-
+		
         // Compile standard instance types, first without optional hardware and pricing metadata.
         for (InstanceType instanceType in enumInstanceTypes) {
             String name = instanceType.toString()
@@ -154,7 +176,7 @@ class InstanceTypeService implements CacheInitializer {
             if (hardwareProfile) {
                 InstanceTypeData instanceTypeData = new InstanceTypeData(
                         hardwareProfile: hardwareProfile,
-                        linuxOnDemandPrice: onDemandPrices.get(instanceType, InstanceProductType.LINUX_UNIX),
+                        linuxOnDemandPrice: onDemandPrices?.get(instanceType, InstanceProductType.LINUX_UNIX),
                 )
                 namesToInstanceTypeDatas[name] = instanceTypeData
             } else {

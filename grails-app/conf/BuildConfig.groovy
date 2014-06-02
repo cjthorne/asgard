@@ -138,7 +138,11 @@ grails.project.dependency.resolution = {
                 // Used for JSON parsing of AWS Simple Workflow Service metadata.
                 // Previously this was an indirect depencency through Grails itself, but this caused errors in some
                 // Grails environments.
-                'com.googlecode.json-simple:json-simple:1.1'
+                'com.googlecode.json-simple:json-simple:1.1',
+				
+				"org.codehaus.groovy.modules.http-builder:http-builder:0.7",
+                
+                'org.mongodb:mongo-java-driver:2.12.2'
         ) { // Exclude superfluous and dangerous transitive dependencies
             excludes(
                     // Some libraries bring older versions of JUnit as a transitive dependency and that can interfere

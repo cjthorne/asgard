@@ -200,10 +200,25 @@ environments {
 }
 
 eureka {
-	port = 8080
+	port = 80
 	regionsToServers = [
-		(Region.US_SOUTH_1): 'eureka-server-here',
+		// should use hostname here, but can be override in ~/.asgard/Config.groovy
+		// using hardcoded address to make demo easier as laptop browser likely doesn't
+		// have access to skydns server in docker
+		(Region.DOCKER_LOCAL_1): '172.17.0.5'
 	]
 }
 
+docker {
+    local {
+        asgController {
+            instanceTagValueMatch = "/microscaler"
+        }
+        restBase = "http://172.17.42.1:4243"
+    }
+}
+
 initializeWorkflowEngine = false
+noEC2 = true
+noSoftLayer = true
+//noDNSLookups = true

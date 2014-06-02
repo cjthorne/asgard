@@ -30,7 +30,10 @@ class InitService implements ApplicationContextAware {
     def configService
     def grailsApplication // modifying the config object directly here
 	def restClientRightScaleService
-
+    def apiInterceptorService
+	def dockerLocalService
+    def softlayerService
+    
     /**
      * Creates the Asgard Config.groovy file and updates the in memory configuration to reflect the configured state
      *
@@ -61,8 +64,14 @@ class InitService implements ApplicationContextAware {
      * Kicks off populating of caches and background threads
      */
     void initializeApplication() {
-		log.info 'logging into rightscale'
-		restClientRightScaleService.performLogin()
+        if (!grailsApplication.config.noSoftLayer) {
+            log.info 'logging into rightscale'
+            restClientRightScaleService.performLogin()
+        }
+        
+        if (!grailsApplication.config.noDocker) {
+            dockerLocalService.initialLogin()
+        }
 		
         log.info 'Starting caches'
         Collection<CacheInitializer> cacheInitializers = applicationContext.getBeansOfType(CacheInitializer).values()
@@ -85,10 +94,27 @@ class InitService implements ApplicationContextAware {
         // Do not wait on optional caches to fill.
         // Waiting on an unimportant cache due to AWS issues should not keep all of Asgard from starting.
         List<String> optionalCacheNames = ['allVolumes']
+        // TODO - research blocking vs. non-blocking caches and use that if appropriate
+        if (grailsApplication.config.noEC2) {
+            optionalCacheNames += 'allWorkflowDomains'
+            optionalCacheNames += 'allOpenWorkflowExecutions'
+            optionalCacheNames += 'allWorkflowTypes'
+            optionalCacheNames += 'allClosedWorkflowExecutions'
+            optionalCacheNames += 'allActivityTypes'
+            optionalCacheNames += 'allHostedZones'
+            optionalCacheNames += 'allOnDemandPrices'
+        }
         optionalCacheNames.each {
             allBlockingCaches.remove(it)
         }
         Collection<Fillable> fillableCaches = allBlockingCaches*.value.findAll { it instanceof Fillable }
+        String caches = ''
+        fillableCaches.findAll { !it.filled }.each {
+            caches += it.name + ', '
+        }
+        if (caches != '') {
+            log.info 'Blocking caches yet to load = ' + caches
+        }
         !fillableCaches.find { !it.filled }
     }
 }

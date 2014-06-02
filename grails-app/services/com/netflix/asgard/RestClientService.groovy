@@ -53,6 +53,8 @@ class RestClientService implements InitializingBean {
     static transactional = false
 
     def configService
+    
+    def grailsApplication
 
     final PoolingClientConnectionManager connectionManager = new PoolingClientConnectionManager()
     HttpClient httpClient
@@ -70,10 +72,12 @@ class RestClientService implements InitializingBean {
         connectionManager.maxTotal = configService.httpConnPoolMaxSize
         connectionManager.defaultMaxPerRoute = configService.httpConnPoolMaxForRoute
 		
-		baseClient.getCredentialsProvider().setCredentials(
-			new AuthScope("api.softlayer.com", 443),
-			new UsernamePasswordCredentials(configService.getSoftLayerAPIUsername(), configService.getSoftLayerAPIAccessKey())
-		)
+        if (!grailsApplication.config.noSoftLayer) {
+    		baseClient.getCredentialsProvider().setCredentials(
+    			new AuthScope("api.softlayer.com", 443),
+    			new UsernamePasswordCredentials(configService.getSoftLayerAPIUsername(), configService.getSoftLayerAPIAccessKey())
+    		)
+        }
     }
 
     /**

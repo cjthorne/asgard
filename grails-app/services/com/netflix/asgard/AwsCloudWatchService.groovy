@@ -83,7 +83,7 @@ class AwsCloudWatchService implements CacheInitializer, InitializingBean {
     }
 
     private List<MetricAlarm> retrieveAlarms(Region region) {
-		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
+        if (Region.isRegionUnimplemented(region.code)) return []
         List<MetricAlarm> alarms = []
         DescribeAlarmsResult result = retrieveAlarms(region, null)
         while (true) {

@@ -38,6 +38,27 @@ class AppRegistration {
     Date updateTime
     Map<String, String> additionalAttributes
 
+    public AppRegistration(String name, String group, String type, String description, String owner,
+        String email, String monitorBucketTypeString, String createTimeString, String updateTimeString,
+        Map<String, String> additionalAttributes) {
+            MonitorBucketType bucketType = MonitorBucketType.byName(monitorBucketTypeString)
+            // TODO:  Handle additional attributes when required
+//            Map<String, String> additionalAttributes = item.attributes
+//                    .findAll { !ASGARD_ATTRIBUTES.contains(it.name) }
+//                    .collectEntries { [it.name, it.value] }
+
+        this.name = name.toLowerCase()
+        this.group = group
+        this.type = type
+        this.description = description
+        this.owner = owner
+        this.email = email
+        this.monitorBucketType =  bucketType
+        this.createTime = asDate(createTimeString)
+        this.updateTime = asDate(updateTimeString)
+        //additionalAttributes: additionalAttributes
+    }
+        
     static AppRegistration from(Item item) {
         if (item) {
             String bucketTypeString = item.getAttribute('monitorBucketType')?.value
@@ -48,16 +69,16 @@ class AppRegistration {
                     .collectEntries { [it.name, it.value] }
 
             return new AppRegistration(
-                name: item.name.toLowerCase(),
-                group: item.getAttribute('group')?.value,
-                type: item.getAttribute('type')?.value,
-                description: item.getAttribute('description')?.value,
-                owner: item.getAttribute('owner')?.value,
-                email: item.getAttribute('email')?.value,
-                monitorBucketType: bucketType,
-                createTime: asDate(item.getAttribute('createTs')?.value),
-                updateTime: asDate(item.getAttribute('updateTs')?.value),
-                additionalAttributes: additionalAttributes
+                item.name.toLowerCase(),
+                item.getAttribute('group')?.value,
+                item.getAttribute('type')?.value,
+                item.getAttribute('description')?.value,
+                item.getAttribute('owner')?.value,
+                item.getAttribute('email')?.value,
+                bucketType.name(),
+                item.getAttribute('createTs')?.value,
+                item.getAttribute('updateTs')?.value,
+                additionalAttributes
             )
         }
         null

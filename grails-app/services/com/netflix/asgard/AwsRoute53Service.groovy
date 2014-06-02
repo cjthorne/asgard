@@ -48,15 +48,20 @@ class AwsRoute53Service implements CacheInitializer, InitializingBean {
     def awsClientService
     Caches caches
     def taskService
+    def grailsApplication
 
     void afterPropertiesSet() {
 
         // Route53 only has one endpoint.
-        awsClient = awsClient ?: awsClientService.create(AmazonRoute53)
+        if (!grailsApplication.config.noEC2) {
+            awsClient = awsClient ?: awsClientService.create(AmazonRoute53)
+        }
     }
 
     void initializeCaches() {
-        caches.allHostedZones.ensureSetUp({ Region region -> retrieveHostedZones() })
+        if (!grailsApplication.config.noEC2) {
+            caches.allHostedZones.ensureSetUp({ Region region -> retrieveHostedZones() })
+        }
     }
 
     /**

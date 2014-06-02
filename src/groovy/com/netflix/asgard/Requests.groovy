@@ -23,7 +23,10 @@ import org.codehaus.groovy.grails.web.servlet.mvc.GrailsWebRequest
 import org.springframework.web.context.request.RequestContextHolder
 
 class Requests {
-
+    
+    // TODO:  Move this to grailsApplication.config, but needs rework due to static methods
+    static performDNSLookups = false
+    
     static HttpServletRequest getRequest() {
         GrailsWebRequest webRequest = (GrailsWebRequest) RequestContextHolder.currentRequestAttributes()
         HttpServletRequest request = webRequest.getCurrentRequest()
@@ -151,7 +154,12 @@ class Requests {
     }
 
     static String getClientHostName(HttpServletRequest request) {
-        InetAddress.getByName(getClientIpAddress(request)).getHostName()
+        if (!performDNSLookups) {
+            getClientIpAddress(request)
+        }
+        else {
+            InetAddress.getByName(getClientIpAddress(request)).getHostName()
+        }
     }
 
     static void renderNotFound(String itemType, String itemName, def controller, String moreInfo = '') {

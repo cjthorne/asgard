@@ -95,7 +95,7 @@
               <span class="toggle fakeLink">${group.instances.size()}</span>
               <div class="advancedItems tiny">
                 <g:each var="ins" in="${group.instances}">
-                  <g:linkObject name="${ins.instanceId}"/><br/>
+                  <g:linkObject type="instance" name="${ins.instanceId}"/><br/>
                 </g:each>
               </div>
             </td>

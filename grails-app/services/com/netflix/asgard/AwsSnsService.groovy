@@ -85,7 +85,7 @@ class AwsSnsService implements CacheInitializer, InitializingBean {
     // Topics
 
     private List<TopicData> retrieveTopics(Region region) {
-		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
+        if (Region.isRegionUnimplemented(region.code)) return []
         List<Topic> topics = topicRetriever.retrieve(region, new ListTopicsRequest())
         topics.collect { new TopicData(it.topicArn) }
     }

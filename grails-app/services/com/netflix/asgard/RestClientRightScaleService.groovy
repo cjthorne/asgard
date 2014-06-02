@@ -120,6 +120,7 @@ class RestClientRightScaleService implements InitializingBean {
 	}
 	
 	def ensureLoggedIn() {
+		log.debug("ensuring logged in...")
 		if (needsToLogin()) {
 			performLogin()
 		}
@@ -158,6 +159,8 @@ class RestClientRightScaleService implements InitializingBean {
             if (readStatusCode(httpResponse) == HttpURLConnection.HTTP_OK) {
                 HttpEntity httpEntity = httpResponse.getEntity()
                 return EntityUtils.toString(httpEntity)
+            }else{
+			   log.error("JSON Request not successful for uri = ${uri}, httpResonse => ${httpResponse}")
             }
             return null
         }
@@ -189,7 +192,7 @@ class RestClientRightScaleService implements InitializingBean {
         try {
             HttpResponse httpResponse = httpClient.execute(request)
 			httpClient.getCookieStore().getCookies().each { 
-				log.debug it
+				log.debug("cookie info for request => ${it}")
 			}
             Object retVal = responseHandler(httpResponse)
             // Ensure the connection gets released to the manager.

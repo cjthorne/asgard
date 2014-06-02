@@ -773,4 +773,20 @@ class ConfigService {
     String getAsgAnalyzerBaseUrl() {
         grailsApplication.config.cloud?.asgAnalyzerBaseUrl ?: ''
     }
+    
+    /**
+     * @return the dockerlocal remote api url
+     */
+    String getDockerLocalBaseURL() {
+        grailsApplication.config.docker.local.restBase ?: ''
+    }
+    
+    String getCloudantAppDBUsername() {
+        grailsApplication.config.secretCloudantAppDatabase?.username ?: null
+    }
+
+    String getCloudantAppDBPassword() {
+        grailsApplication.config.secretCloudantAppDatabase?.password ?: null
+    }
+
 }

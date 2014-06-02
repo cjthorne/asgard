@@ -145,7 +145,8 @@ class Caches {
         // Use one thread for all instance type and pricing caches. None of these need updating more than once an hour.
         allHardwareProfiles = cachedMapBuilder.of(EntityType.hardwareProfile, 3600).buildCachedMap()
         allOnDemandPrices = MultiRegionInstancePrices.create('On Demand Prices')
-        allInstanceTypes = cachedMapBuilder.of(EntityType.instanceType).buildMultiRegionCachedMap()
+        // TODO:  Had to put in an interval to force this to be updated at least once, not sure why yet
+        allInstanceTypes = cachedMapBuilder.of(EntityType.instanceType, 3600).buildMultiRegionCachedMap()
         allTerminationPolicyTypes = cachedMapBuilder.of(EntityType.terminationPolicyType, 3600).buildCachedMap()
     }
 }

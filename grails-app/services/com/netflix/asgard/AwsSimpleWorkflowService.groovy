@@ -67,6 +67,8 @@ class AwsSimpleWorkflowService implements CacheInitializer, InitializingBean {
     def awsClientService
     def configService
     Caches caches
+    
+    def grailsApplication
 
     /**
      * Configure service properties
@@ -74,19 +76,23 @@ class AwsSimpleWorkflowService implements CacheInitializer, InitializingBean {
     void afterPropertiesSet() {
 
         // Workflows are stored only in the default region, so no multi-region support needed here.
-        simpleWorkflowClient = awsClientService.create(AmazonSimpleWorkflow)
+        if (!grailsApplication.config.noEC2) {
+            simpleWorkflowClient = awsClientService.create(AmazonSimpleWorkflow)
+        }
     }
 
     /**
      * Set up relevant cache objects to begin retrieving data.
      */
     void initializeCaches() {
-        caches.allWorkflowDomains.ensureSetUp({ retrieveDomainsAndEnsureDomainIsRegistered() }, {
-            caches.allOpenWorkflowExecutions.ensureSetUp({ retrieveOpenWorkflowExecutions() })
-            caches.allClosedWorkflowExecutions.ensureSetUp({ retrieveClosedWorkflowExecutions() })
-            caches.allWorkflowTypes.ensureSetUp({ retrieveWorkflowTypes() })
-            caches.allActivityTypes.ensureSetUp({ retrieveActivityTypes() })
-        })
+        if (!grailsApplication.config.noEC2) {
+            caches.allWorkflowDomains.ensureSetUp({ retrieveDomainsAndEnsureDomainIsRegistered() }, {
+                caches.allOpenWorkflowExecutions.ensureSetUp({ retrieveOpenWorkflowExecutions() })
+                caches.allClosedWorkflowExecutions.ensureSetUp({ retrieveClosedWorkflowExecutions() })
+                caches.allWorkflowTypes.ensureSetUp({ retrieveWorkflowTypes() })
+                caches.allActivityTypes.ensureSetUp({ retrieveActivityTypes() })
+            })
+        }
     }
 
     // Activity types

@@ -72,7 +72,13 @@ enum Region {
 		'us-east-1', // until pricing is working
 		'us-south-1.png',
 		'Dallas'
-	)
+	),
+	DOCKER_LOCAL_1('docker-local-1',
+		'us-east-1', // until pricing is working
+		'homepage-docker-logo.png',
+		'Local'
+	),
+
 	static US_SOUTH_1_REGION_CODE = 'us-south-1'
 
     String code
@@ -117,8 +123,8 @@ enum Region {
      */
     static List<Region> getLimitedRegions() {
         String onlyRegions = System.getProperty('onlyRegions')
-		// TODO: only for quicker development - remove - for some reason using System Property killed gradlew
-		onlyRegions = "us-east-1,us-south-1"
+	// TODO: Remove this hardcoding eventually
+        onlyRegions = "docker-local-1"
         if (onlyRegions) {
             List<String> regionNames = onlyRegions.tokenize(',')
             return regionNames.collect { Region.withCode(it) }
@@ -132,4 +138,9 @@ enum Region {
     }
 
     String toString() { code }
+    
+    static boolean isRegionUnimplemented(String regionCode) {
+        return regionCode == Region.US_SOUTH_1.code ||
+            regionCode == Region.DOCKER_LOCAL_1.code;
+    }
 }

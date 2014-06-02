@@ -175,7 +175,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
     private List<AvailabilityZone> retrieveAvailabilityZones(Region region) {
 		def List<AvailabilityZone> result
 		if (region.code == Region.US_SOUTH_1_REGION_CODE) {
-			JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters')
+			JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/datacenters')
 			def List<AvailabilityZone> zones = []
 			json.each {
 				log.debug "instance = " + it
@@ -225,7 +225,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 
 	private List<Image> retrieveAllRightScaleImages(Region region) {
-		JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
 		List<Image> images = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
@@ -263,7 +263,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 	
 	private List<Image> retrieveRightScaleImage(String imageId) {
-		JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		String href = getRightScaleImageHref(it.links)
 		String imageId2 = href.substring(href.lastIndexOf('/')+1)
@@ -968,7 +968,7 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 
 	private Instance getRightScaleInstance(String instanceId) {
-		JSONObject json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
+		JSONObject json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances/' + instanceId + '?view=extended')
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
 		String instanceTypeId = json.links ? getInstanceTypeIdFromRelLinks(json.links) : '-unknown-'
@@ -994,16 +994,12 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 	}
 	
 	private List<Instance> getRightScaleInstances() {
-		JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json?view=extended')
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/instances.json?view=extended')
 		List<Instance> instances = []
 		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 		json.each {
 			log.debug "instance = " + it
-            if (getIdFromRelLinks(it.links, 'deployment') != configService.getRightScaleDeploymentId()) {
-                // only work with arrays in current deployment (dev vs. test vs. prod in RightScale)
-                return
-            }
-
+			
 			String instanceTypeId = it.links ? getInstanceTypeIdFromRelLinks(it.links) : '-unknown-'
 			def allInstanceTypes = caches.allInstanceTypes.by(Region.US_SOUTH_1).list()
 			InstanceTypeData instanceType = allInstanceTypes?.find{ it.rightscaleInstanceTypeId == instanceTypeId }
