@@ -687,7 +687,7 @@ class DockerLocalService implements InitializingBean {
 		result.launchConfigCreated = true // should exist in ASG Controller now.
 		
 		// Create the AutoScalingGroup next
-		createAutoScalingGroupForDocker(userContext, groupOptions, true)
+		createAutoScalingGroupForDocker(userContext, groupOptions)
 		// Start the AutoScalingGroup
 		
 		result.autoScalingGroupCreated = true
