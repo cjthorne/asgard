@@ -178,14 +178,14 @@ class DockerLocalService implements InitializingBean {
 		def restClient = new RESTClient(dockerRestBase)
 		List<Instance_EC2> instances = []
 		def containers = []
-		restClient.get(path: "/containers/json") {response, jsonContainers ->
+		restClient.get(path: "/v1.11/containers/json") {response, jsonContainers ->
 			containers = jsonContainers.collect { 
 				it
 			}//.sort({ a, b -> dtp.parseDateTime(a.createDate) <=> dtp.parseDateTime(b.createDate) } as Comparator)
 			def counter = 0
 		}
 		containers.each { container -> 
-			restClient.get(path: "/containers/${container.Id}/json") {responseInner, inspectInfo ->
+			restClient.get(path: "/v1.11/containers/${container.Id}/json") {responseInner, inspectInfo ->
 				def instance = new Instance_EC2(
 					instanceId: inspectInfo.ID,
 					imageId: inspectInfo.Image,
@@ -231,7 +231,7 @@ class DockerLocalService implements InitializingBean {
         log.debug 'retrieveImages'
 		def restClient = new RESTClient(dockerRestBase)
 		List<Image> images = []
-		restClient.get(path: "/images/json") { response, json ->
+		restClient.get(path: "/v1.11/images/json") { response, json ->
 			json.each {
 				def image = new Image()
 				image.setName(it.RepoTags[0])
