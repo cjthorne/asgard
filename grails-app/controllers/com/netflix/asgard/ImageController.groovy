@@ -17,7 +17,8 @@ package com.netflix.asgard
 
 import com.amazonaws.AmazonServiceException
 import com.amazonaws.services.autoscaling.model.LaunchConfiguration
-import com.amazonaws.services.ec2.model.Image
+//import com.amazonaws.services.ec2.model.Image
+import com.woorea.openstack.nova.model.Image
 import com.amazonaws.services.ec2.model.Instance
 import com.amazonaws.services.ec2.model.SpotInstanceRequest
 import com.netflix.asgard.model.InstanceTypeData
@@ -51,14 +52,14 @@ class ImageController {
 
     def list = {
         UserContext userContext = UserContext.of(request)
-        Collection<Image> images = []
+        Collection<com.woorea.openstack.nova.model.Image> images = []
         Set<String> packageNames = Requests.ensureList(params.id).collect { it.split(',') }.flatten() as Set<String>
         if (packageNames) {
             images = packageNames.collect { awsEc2Service.getImagesForPackage(userContext, it) }.flatten()
         } else {
             images = awsEc2Service.getImagesForPackage(userContext, '')
         }
-        images = images.sort { it.imageLocation.toLowerCase() }
+        images = images.sort { it.metadata['location'].toLowerCase() }
         Map<String, String> accounts = grailsApplication.config.grails.awsAccountNames
         withFormat {
             html { [images: images, packageNames: packageNames, accounts: accounts] }
@@ -71,15 +72,15 @@ class ImageController {
         UserContext userContext = UserContext.of(request)
         String imageId = EntityType.image.ensurePrefix(params.imageId ?: params.id)
         Image image = imageId ? awsEc2Service.getImage(userContext, imageId) : null
-        image?.tags?.sort { it.key }
+        //image?.tags?.sort { it.key }
         if (!image) {
             Requests.renderNotFound('Image', imageId, this)
         } else {
             List<String> launchUsers = []
-            try { launchUsers = awsEc2Service.getImageLaunchers(userContext, image.imageId) }
+            try { launchUsers = awsEc2Service.getImageLaunchers(userContext, image.id) }
             catch (AmazonServiceException ignored) { /* We may not own the image, so ignore failures here */ }
-            String snapshotId = image.blockDeviceMappings.findResult { it.ebs?.snapshotId }
-            String ownerId = image.ownerId
+            String snapshotId = image.metadata['snapshotId']
+            String ownerId = image.metadata['ownerId']
             Map<String, String> accounts = grailsApplication.config.grails.awsAccountNames
             Map details = [
                     image: image,

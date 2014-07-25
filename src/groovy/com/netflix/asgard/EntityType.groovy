@@ -88,6 +88,7 @@ import java.lang.reflect.Modifier
             { it.instanceType.toString() })
     static final EntityType<HostedZone> hostedZone = create('Hosted Zone', { it.id })
     static final EntityType<Image> image = create('Image', { it.imageId })
+	static final EntityType<com.woorea.openstack.nova.model.Image> image2 = create('Image', { it.id })
     static final EntityType<Instance> instance = create('Instance', { it.instanceId }, 'i-')
     static final EntityType<InstanceHealth> instanceHealth = create('Instance Health', { it.instanceId })
     static final EntityType<InstanceTypeData> instanceType = create('Instance Type', { it.name })

@@ -92,6 +92,7 @@ import com.google.common.collect.HashMultiset
 import com.google.common.collect.Lists
 import com.google.common.collect.Multiset
 import com.netflix.asgard.cache.CacheInitializer
+import com.netflix.asgard.joke.ImageAttributions;
 import com.netflix.asgard.model.AutoScalingGroupData
 import com.netflix.asgard.model.InstanceTypeData
 import com.netflix.asgard.model.SecurityGroupOption
@@ -224,86 +225,107 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
 		return selflink.href
 	}
 
-	private List<Image> retrieveAllRightScaleImages(Region region) {
-		JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
-		List<Image> images = []
-		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-		json.each {
-			log.debug "json image = " + it
-			String href = getRightScaleImageHref(it.links)
-			String imageId = href.substring(href.lastIndexOf('/')+1)
-			Tag tag = new Tag(
-				key : 'rightscale_imagehref',
-				value : href
-			)
-			Image image = new Image(
-				imageId: imageId,
-				imageLocation: it.resource_uid + '/' + it.name,
-				state: 'available',
-				ownerId: '665469383253',
-				//public: false,
-				//productCodes: [],
-				architecture: it.cpu_architecture,
-				imageType: it.image_type,
-				kernelId: 'aki-fakeid',
-				name: it.name,
-				//description: ,
-				rootDeviceType: 'ebs',
-				rootDeviceName: '/dev/sda1',
-				//BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
-				virtualizationType: 'paravirtual',
-				//Tags: [],
-				hypervisor: 'fakehv').withTags([tag])
-			log.debug "image = " + image
-			
-			images.add(image)
-		}
-		log.debug 'images = ' + images
-		return images
-	}
-	
-	private List<Image> retrieveRightScaleImage(String imageId) {
-		JSONArray json = restClientRightScaleService.getAsJson('https://us-4.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images/' + imageId)
-		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-		String href = getRightScaleImageHref(it.links)
-		String imageId2 = href.substring(href.lastIndexOf('/')+1)
-		Tag tag = new Tag(
-			key : 'rightscale_imagehref',
-			value : href
-		)
-		Image image = new Image(
-			imageId: imageId2,
-			imageLocation: it.resource_uid + '/' + it.name,
-			state: 'available',
-			ownerId: '665469383253',
-			//public: false,
-			//productCodes: [],
-			architecture: it.cpu_architecture,
-			imageType: it.image_type,
-			kernelId: 'aki-fakeid',
-			name: it.name,
-			//description: ,
-			rootDeviceType: 'ebs',
-			rootDeviceName: '/dev/sda1',
-			//BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
-			virtualizationType: 'paravirtual',
-			//Tags: [],
-			hypervisor: 'fakehv').
-			withTags([tag])
-			
-		log.debug "image = " + image
-		image
+	private List<com.woorea.openstack.nova.model.Image> retrieveAllRightScaleImages(Region region) {
+		// TODO:  Fix restClient to ensure login instead of doing 2 calls ever single time
+		def resp1 = restClientRightScaleService.post('https://my.rightscale.com/api/session',
+			[email : configService.getRightScaleEmail(), password: configService.getRightScalePassword(), account_href : '/api/accounts/' + configService.getRightScaleAccountId()])
+		log.warn resp1
+		JSONArray json = restClientRightScaleService.getAsJson('https://my.rightscale.com/api/clouds/' + configService.getRightScaleCloudId() + '/images.json')
+		convertImagesFromRightScale(json)
 	}
 
-    private List<Image> retrieveImages(Region region) {
-		if (region.code == Region.US_SOUTH_1_REGION_CODE) {
+	private List<com.woorea.openstack.nova.model.Image> convertImagesFromRightScale(JSONArray rsImages) {
+		rsImages.collect  { convertImageFromRightScale (it) }
+	}
+	
+	private com.woorea.openstack.nova.model.Image convertImageFromRightScale(JSONObject rsImage) {
+		def DateFormat dateParser = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+		String href = getRightScaleImageHref(rsImage.links)
+		String imageId2 = href.substring(href.lastIndexOf('/')+1)
+		//String snapshotId = image.blockDeviceMappings.findResult { rightscaleImage?.snapshotId }
+		com.woorea.openstack.nova.model.Image i = new com.woorea.openstack.nova.model.Image(
+			id : imageId2,
+			status : 'available',
+			name : rsImage.name,
+			progress : 0,
+			minRam: 0,
+			minDisk: 0,
+			//private Calendar created;
+			//private Calendar updated;
+			//private Long size;
+			metadata : [
+				location: rsImage.resource_uid + '/' + rsImage.name,
+				architecture: rsImage.cpu_architecture,
+				ownerId: '665469383253',
+				// TODO:  this is really cheating as blockDeviceMappings is deeper of a structure
+				snapshotId : '12345',
+				platfrom : 'fakeplatform',
+				imageType : rsImage.image_type,
+				ownerId : '12345',
+				kernelId : 'kernel-fakeid',
+				ramdiskId : 'ramdisk-fakeid',
+				blockDeviceMapping : [],
+				tags : []
+			],
+			//private List<Link> links;
+		)
+	}
+
+	private List<com.woorea.openstack.nova.model.Image> convertImagesFromEC2(List<Image> ec2Images) {
+		List<com.woorea.openstack.nova.model.Image> retImages = []
+		ec2Images.eachWithIndex { image, index ->
+			String snapshotId = image.blockDeviceMappings.findResult { it.ebs?.snapshotId }
+			com.woorea.openstack.nova.model.Image i = new com.woorea.openstack.nova.model.Image(
+				id : image.imageId,
+				status : image.state,
+				name : image.name,
+				progress : 0,
+				minRam: 0,
+				minDisk: 0,
+				//private Calendar created;
+				//private Calendar updated;
+				//private Long size;
+				metadata : [
+					location: image.imageLocation,
+					architecture: image.architecture,
+					ownerId: image.ownerId,
+					// TODO:  this is really cheating as blockDeviceMappings is deeper of a structure
+					snapshotId : snapshotId,
+					platfrom : image.platform,
+					imageType : image.imageType,
+					ownerId : image.ownerId,
+					kernelId : image.kernelId,
+					ramdiskId : image.ramdiskId,
+					blockDeviceMapping : image.blockDeviceMappings.collect { bdMapping ->
+						[
+							deviceName : bdMapping.deviceName,
+							noDevice : bdMapping.noDevice,
+							virtualName : bdMapping.virtualName
+						]
+					},
+					tags : image.tags.collect { tag ->
+						[
+							key: tag.key,
+							value : tag.value
+						]
+					}
+				],
+				//private List<Link> links;
+			)
+			retImages.add(i)
+		}
+		retImages
+	}
+	
+	private List<com.woorea.openstack.nova.model.Image> retrieveImages(Region region) {
+		if (region.code == Region.SL_US_REGION_CODE) {
 			return retrieveAllRightScaleImages(region)
 		}
 		
-        List<String> owners = configService.publicResourceAccounts + configService.awsAccounts
-        DescribeImagesRequest request = new DescribeImagesRequest().withOwners(owners)
-        AmazonEC2 awsClientForRegion = awsClient.by(region)
-        List<Image> images = awsClientForRegion.describeImages(request).getImages()
+		List<String> owners = configService.publicResourceAccounts + configService.awsAccounts
+		DescribeImagesRequest request = new DescribeImagesRequest().withOwners(owners)
+		AmazonEC2 awsClientForRegion = awsClient.by(region)
+		List<Image> images = awsClientForRegion.describeImages(request).getImages()
         // Temporary workaround because Amazon can send us the list of images without the tags occasionally.
         // So far it's prevented the image cache from going in a bad state again, but we need a better long term fix.
         if (images && !images.any { it.tags } ) {
@@ -317,33 +339,13 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
             // Merge the images with tags issue and add any tagless images to the list
             images = images.collect { imageIdToImageWithTags[it.imageId] ?: it }
         }
-		//log.debug "images = " + images
-//		images = [
-//			{
-//				ImageId: ami-00d29669,
-//				ImageLocation: 665469383253/acmeair-auth-service-wlp-0.0.0.3,
-//				State: available,
-//				OwnerId: 665469383253,
-//				Public: false,
-//				ProductCodes: [],
-//				Architecture: x86_64,
-//				ImageType: machine,
-//				KernelId: aki-88aa75e1,
-//				Name: acmeair-auth-service-wlp-0.0.0.3,
-//				Description: ,
-//				RootDeviceType: ebs,
-//				RootDeviceName: /dev/sda1,
-//				BlockDeviceMappings: [{DeviceName: /dev/sda1, Ebs: {SnapshotId: snap-dc896288, VolumeSize: 8, DeleteOnTermination: true, VolumeType: standard, }, }],
-//				VirtualizationType: paravirtual,
-//				Tags: [],
-//				Hypervisor: xen
-//			}, {ImageId: ...
-        images
-    }
-
-    Collection<Image> getAccountImages(UserContext userContext) {
-        caches.allImages.by(userContext.region).list()
-    }
+		
+		convertImagesFromEC2(images)
+	}
+	
+	Collection<com.woorea.openstack.nova.model.Image> getAccountImages(UserContext userContext) {
+		caches.allImages.by(userContext.region).list()
+	}
 
     private Collection<Subnet> retrieveSubnets(Region region) {
 		if (region.code == Region.US_SOUTH_1_REGION_CODE) return []
@@ -422,32 +424,33 @@ class AwsEc2Service implements CacheInitializer, InitializingBean {
      * @param name the package name (usually app name) to look for
      * @return Collection< Image > the images with the specified package name, or all images if name is null or empty
      */
-    Collection<Image> getImagesForPackage(UserContext userContext, String name) {
-        name ? getAccountImages(userContext).findAll { name == it.packageName } : getAccountImages(userContext)
-    }
+	Collection<com.woorea.openstack.nova.model.Image> getImagesForPackage(UserContext userContext, String name) {
+		name ? getAccountImages(userContext).findAll { name == it.packageName } : getAccountImages(userContext)
+	}
 
-    Image getImage(UserContext userContext, String imageId, From preferredDataSource = From.AWS) {
-        Image image = null
+    com.woorea.openstack.nova.model.Image getImage(UserContext userContext, String imageId, From preferredDataSource = From.AWS) {
+        com.woorea.openstack.nova.model.Image image = null
         if (imageId) {
             if (preferredDataSource == From.CACHE) {
                 image = caches.allImages.by(userContext.region).get(imageId)
                 if (image) { return image }
             }
-			List<Image> images = []
-			if (userContext.region.code == Region.US_SOUTH_1_REGION_CODE) {
+			List<com.woorea.openstack.nova.model.Image> images = []
+			if (userContext.region.code == Region.SL_US_REGION_CODE) {
 				images = retrieveAllRightScaleImages(userContext.region)
-				images = images.findAll { it.imageId == imageId }
+				images = images.findAll { it.id == imageId }
 			}
 			else {
 				def request = new DescribeImagesRequest().withImageIds(imageId)
 				try {
-					images = awsClient.by(userContext.region).describeImages(request).getImages()
+					List<Image> awsImages = awsClient.by(userContext.region).describeImages(request).getImages()
+					images = convertImagesFromEC2(awsImages)
 				}
 				catch (AmazonServiceException ignored) {
                 	// If Amazon doesn't know this image id then return null and put null in the allImages CachedMap
 				}
 			}
-			image = Check.loneOrNone(images, Image)
+			image = Check.loneOrNone(images, com.woorea.openstack.nova.model.Image)
 			caches.allImages.by(userContext.region).put(imageId, image)
         }
         image

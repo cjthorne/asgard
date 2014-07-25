@@ -22,6 +22,7 @@ import com.amazonaws.services.autoscaling.model.ScheduledUpdateGroupAction
 import com.amazonaws.services.cloudwatch.model.MetricAlarm
 import com.amazonaws.services.ec2.model.AvailabilityZone
 import com.amazonaws.services.ec2.model.Image
+import com.woorea.openstack.nova.model.Image
 import com.amazonaws.services.ec2.model.Instance
 import com.amazonaws.services.ec2.model.KeyPairInfo
 import com.amazonaws.services.ec2.model.ReservedInstances
@@ -79,7 +80,7 @@ class Caches {
     final MultiRegionCachedMap<String> allDomains
     final MultiRegionCachedMap<String> allEurekaAddresses
     final MultiRegionCachedMap<FastProperty> allFastProperties
-    final MultiRegionCachedMap<Image> allImages
+    final MultiRegionCachedMap<com.woorea.openstack.nova.model.Image> allImages
     final MultiRegionCachedMap<Instance> allInstances
     final MultiRegionCachedMap<InstanceHealth> allSignificantStackInstanceHealthChecks
     final MultiRegionCachedMap<InstanceTypeData> allInstanceTypes
@@ -111,7 +112,7 @@ class Caches {
         allSubnets = cachedMapBuilder.of(EntityType.subnet, 3600).buildMultiRegionCachedMap()
         allVpcs = cachedMapBuilder.of(EntityType.vpc, 3600).buildMultiRegionCachedMap()
         allKeyPairs = cachedMapBuilder.of(EntityType.keyPair).buildMultiRegionCachedMap()
-        allImages = cachedMapBuilder.of(EntityType.image, 120).buildMultiRegionCachedMap()
+		allImages = cachedMapBuilder.of(EntityType.image2, 120).buildMultiRegionCachedMap()
         allInstances = cachedMapBuilder.of(EntityType.instance, 120).buildMultiRegionCachedMap()
         allSpotInstanceRequests = cachedMapBuilder.of(EntityType.spotInstanceRequest, 120).buildMultiRegionCachedMap()
         allApplicationInstances = cachedMapBuilder.of(EntityType.applicationInstance, 60).buildMultiRegionCachedMap()

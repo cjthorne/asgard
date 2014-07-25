@@ -19,7 +19,7 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta name="layout" content="main"/>
-  <title>${image.imageId} ${image.name} Image</title>
+  <title>${image.id} ${image.name} Image</title>
 </head>
 <body>
   <div class="body">
@@ -34,16 +34,16 @@
     </g:hasErrors>
     <div class="buttons">
       <g:form>
-        <input type="hidden" name="id" value="${image.imageId}"/>
-        <g:link class="edit" action="edit" params="[id:image.imageId]">Edit Image Attributes</g:link>
+        <input type="hidden" name="id" value="${image.id}"/>
+        <g:link class="edit" action="edit" params="[id:image.id]">Edit Image Attributes</g:link>
         <g:if test="${accountName == env}">
           <g:buttonSubmit class="delete" action="delete" value="Delete Image"
-                          data-warning="Really delete image '${image.imageId}' with name '${image.name}'?" />
+                          data-warning="Really delete image '${image.id}' with name '${image.name}'?" />
         </g:if>
         <g:else>
           <g:buttonSubmit disabled="true" class="delete" action="ignore" value="This image can only be deleted in ${accountName}"/>
         </g:else>
-        <g:link class="push" action="prelaunch" params="[id:image.imageId]">Prepare to Launch Image Instance</g:link>
+        <g:link class="push" action="prelaunch" params="[id:image.id]">Prepare to Launch Image Instance</g:link>
       </g:form>
     </div>
     <div class="dialog">
@@ -51,7 +51,7 @@
         <tbody>
         <tr class="prop">
           <td class="name">ID:</td>
-          <td class="value">${image.imageId}</td>
+          <td class="value">${image.id}</td>
         </tr>
         <tr class="prop">
           <td class="name">Name:</td>
@@ -59,31 +59,31 @@
         </tr>
         <tr class="prop">
           <td class="name">Description:</td>
-          <td class="value">${image.description}</td>
+          <td class="value">${image.name}</td>
         </tr>
         <tr class="prop">
           <td class="name">Location:</td>
-          <td class="value">${image.imageLocation}</td>
+          <td class="value">${image.metadata['imageLocation']}</td>
         </tr>
         <tr class="prop">
           <td class="name">Architecture:</td>
-          <td class="value">${image.architecture}</td>
+          <td class="value">${image.metadata['architecture']}</td>
         </tr>
         <tr class="prop">
           <td class="name">Platform:</td>
-          <td class="value">${image.platform}</td>
+          <td class="value">${image.metadata['platform']}</td>
         </tr>
         <tr class="prop">
           <td class="name">Type:</td>
-          <td class="value">${image.imageType}</td>
+          <td class="value">${image.metadata['imageType']}</td>
         </tr>
         <tr class="prop">
           <td class="name">State:</td>
-          <td class="value">${image.state}</td>
+          <td class="value">${image.status}</td>
         </tr>
         <tr class="prop">
           <td class="name">Owner:</td>
-          <td class="value">${accountName} (${image.ownerId})</td>
+          <td class="value">${accountName} (${image.metadata['ownerId']})</td>
         </tr>
         <tr class="prop">
           <td class="name">Launch Permissions:</td>
@@ -91,11 +91,11 @@
         </tr>
         <tr class="prop">
           <td class="name">Kernel ID:</td>
-          <td class="value">${image.kernelId}</td>
+          <td class="value">${image.metadata['kernelId']}</td>
         </tr>
         <tr class="prop">
           <td class="name">Ramdisk ID:</td>
-          <td class="value">${image.ramdiskId}</td>
+          <td class="value">${image.metadata['ramdiskId']}</td>
         </tr>
         <g:if test="${snapshotId}">
             <tr class="prop">
@@ -106,12 +106,12 @@
         <tr class="prop">
           <td class="name">Block Device Mappings:</td>
           <td class="value">
-            <g:each var="blockDeviceMapping" in="${image.blockDeviceMappings?.sort { it.deviceName }}">
+            <g:each var="blockDeviceMapping" in="${image.metadata['blockDeviceMappings']?.sort { it.deviceName }}">
               <div>${blockDeviceMapping}</div>
             </g:each>
           </td>
         </tr>
-        <g:render template="/common/showTags" model="[entity: image]"/>
+        <g:render template="/common/showTags2" model="[tags: image.metadata['tags']]"/>
         <tr class="prop">
           <td><h2>Referenced From</h2></td>
         </tr>

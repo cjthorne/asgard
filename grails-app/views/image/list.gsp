@@ -49,17 +49,18 @@
         <tbody>
         <g:each var="image" in="${images}" status="i">
           <tr class="${(i % 2) == 0 ? 'odd' : 'even'}">
-            <td><g:linkObject type="image" name="${image.imageId}"/></td>
+            <td><g:linkObject type="image" name="${image.id}"/></td>
             <td class="ami">${image.name}</td>
-            <td class="ami">${image.description}</td>
-            <td>${image.state}</td>
-            <td>${accounts[image.ownerId] ?: image.ownerId}</td>
-            <td>${image.creator}</td>
-            <td>${image.creationTime}</td>
-            <td>${image.lastReferencedTime}</td>
-            <td class="ami">${image.appVersion}</td>
-            <td><g:linkObject type="image" name="${image.baseAmiId}"/></td>
-            <td><g:formatDate date="${image.baseAmiDate?.toDate()}" format="yyyy-MM-dd"/></td>
+            <td class="ami">${image.metadata['location']}</td>
+            <td>${image.metadata['architecture']}</td>
+            <td>${image.status}</td>
+            <td>${accounts[image.metadata['ownerId']] ?: image.metadata['ownerId']}</td>
+            <td>${image.metadata['creator'] ?: ''}</td>
+            <td>${image.metadata['creationTime'] ?: ''}</td>
+            <td>${image.metadata['lastReferencedTime'] ?: ''}</td>
+            <td class="ami">${image.metadata['appVersion'] ?: ''}</td>
+            <td><g:linkObject type="image" name="${image.metadata['baseAmiId'] ?: ''}"/></td>
+            <td><g:formatDate date="${image.metadata['baseAmiDate']?.toDate()}" format="yyyy-MM-dd"/></td>
           </tr>
         </g:each>
         </tbody>
