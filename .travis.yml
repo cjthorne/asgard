@@ -3,8 +3,8 @@ script: ./grailsw war
 deploy:
   provider: releases
   api_key:
-    secure: fkxbuf9zLfyXS6Qef9kRDBohRLqbEfjZ1P8wF7rDZmdBiPHiVYG8CEvCrY5/k2U8m5TkdBNyYVkTkjO8rDj0QnLW/+2HThJ/4kALt+8Ul2CNS6ITDEGWTYOc0dwaBGM5dFPg+ht9p0hGKPi1BmG3sBq/8HGzi21UPa+XHY3nNr8=
+    secure: SjsW8jTfi88DboqafQUaYcYIUiiqkydxFgjlNSZwugAVXX7+DAD8S9UuFd3b6TDUCL+cfq7aSqFNaVHuDLSGnX0ARB8lrrXrAxkh+Y6O/t2a8EGNeTvR8l4RS/Q/vNi/VgmrhiWTER1VhLKVS1weyJdmdoWxSjTt4iQ2bN9tiWg=
   file: target/asgard.war
   on:
     tags: true
-    all_branches: true
+    all_branches: true 
